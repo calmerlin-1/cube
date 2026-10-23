@@ -18,8 +18,35 @@
  * allocates. The caller owns the input buffer and must keep it alive
  * for as long as any url_view referencing it is used.
  *
+ * Two narrow exceptions to "points into the input":
+ *   - host: points into idna_storage when the input host was non-ASCII.
+ *   - path: points at a static "/" when the input had an authority but
+ *     no path. The literal is process-lifetime; no free is needed.
+ *
  * Parsing and validation are separate concerns (RFC 3986 §1.1.3).
  * url_parse is permissive; url_validate applies the strict rules.
+ * URL_OK from url_parse means "syntactically URL-shaped," NOT "safe."
+ *
+ * Security model — for untrusted input:
+ *   - Always call url_validate after url_parse. url_parse alone accepts
+ *     relative references (e.g. "notaurl") and schemeless authority
+ *     references (e.g. "://nope"), which url_validate rejects as
+ *     malformed absolute URLs.
+ *   - Do not set URL_F_ALLOW_SPACE or URL_F_ALLOW_CTRL on input
+ *     destined for HTTP headers, logs, filenames, or shell commands.
+ *     URL_F_ALLOW_CTRL admits \r\n and other control bytes; allowing
+ *     them is how CRLF injection and log-forging happen.
+ *   - url_parse does not percent-decode. "%0d%0a" stays literal text.
+ *     If you later decode and hand the result to a header, that is
+ *     your CRLF risk — not the parser's.
+ *   - Host parsing uses the FIRST '@' in the authority, per RFC 3986.
+ *     Browsers use the LAST '@'. For URLs of the form
+ *     https://a@b@c/, url_parse and a browser may report different
+ *     hosts. Do not rely on url_same_origin matching a browser's
+ *     origin for inputs containing more than one '@'. Validate first.
+ *   - IPv6 bracketing "[...]" is recognized and the brackets are
+ *     stripped from host, but the enclosed address is not validated
+ *     by url_parse. url_validate performs the IPv6 syntax check.
  */
 
 #ifndef FLYWHEEL_URL_PARSER_H
@@ -34,14 +61,19 @@
  * url_parse / url_parse_ex / url_parse_whatwg_stable call.
  *
  * Minimum enforced 64 bytes (below that, no useful URL fits).
- * Set to 0 to reset to default. */
+ * Set to 0 to reset to default.
+ *
+ * Not thread-safe: setting this concurrently with any parse is a data
+ * race on g_url_max_len. Set once at startup, before any parses run. */
 void   url_set_max_len(size_t bytes);
 size_t url_get_max_len(void);
 
-/* Parse flags — control acceptance policy. Default (0) accepts any RFC-valid scheme. */
+/* Parse flags — control acceptance policy. Default (0) accepts any RFC-valid scheme.
+ * Do NOT set ALLOW_CTRL or ALLOW_SPACE on untrusted input; see the security
+ * model above. */
 #define URL_F_STRICT_HTTP   (1u << 0)  /* only http/https allowed */
-#define URL_F_ALLOW_CTRL    (1u << 1)  /* don't reject control chars */
-#define URL_F_ALLOW_SPACE   (1u << 2)  /* don't reject unencoded whitespace */
+#define URL_F_ALLOW_CTRL    (1u << 1)  /* admit control bytes (incl. \r\n) — do not use on untrusted input */
+#define URL_F_ALLOW_SPACE   (1u << 2)  /* admit unencoded whitespace — do not use on untrusted input */
 #define URL_F_NO_DEFAULT    (1u << 3)  /* don't substitute scheme default port */
 #define URL_F_LOWERCASE_HOST (1u << 4) /* lowercase host (default on) */
 
@@ -98,7 +130,9 @@ typedef struct {
     char     idna_storage[512];
 } url_view;
 
-/** Parse a URL string, strict RFC 3986. Zero-copy view into `s`. */
+/** Parse a URL string, strict RFC 3986. Zero-copy view into `s`.
+ *  URL_OK means syntactically URL-shaped, not safe. For untrusted input,
+ *  call url_validate afterwards. */
 url_err url_parse(const char *s, size_t len, url_view *out);
 /** Same as url_parse, with flag-controlled acceptance (URL_F_*). */
 url_err url_parse_ex(const char *s, size_t len, uint32_t flags, url_view *out);
@@ -112,7 +146,8 @@ url_err url_parse_whatwg_stable(const char *s, size_t len,
                                 char *norm_buf, size_t norm_cap,
                                 size_t *norm_len_out, url_view *out);
 
-/** Strict component-level validation: percent-encoding, IPv6 syntax. */
+/** Strict component-level validation: percent-encoding, IPv6 syntax.
+ *  This is the function to call after url_parse for untrusted input. */
 url_err url_validate(const url_view *u);
 
 /** Try url_parse first; fall back to url_parse_whatwg_stable if strict rejects. */
@@ -136,9 +171,12 @@ url_err url_build_href_encoded(const url_view *u, char *out, size_t cap, size_t 
 /** Like url_build_href, but include userinfo (user:pass@). Rarely safe to log. */
 url_err url_build_full(const url_view *u, char *out, size_t cap, size_t *n);
 
-/** 1 if hosts are equal, case-insensitive, trailing dots stripped, IDN in punycode. */
+/** 1 if hosts are equal, case-insensitive, trailing dots stripped, IDN in punycode.
+ *  Uses the parsed host field as-is. For URLs containing more than one '@',
+ *  parse and browser may disagree on host — validate first if that matters. */
 int url_same_host(const url_view *a, const url_view *b);
-/** 1 if scheme + host + effective port all match (RFC 6454 Same-Origin Policy). */
+/** 1 if scheme + host + effective port all match (RFC 6454 Same-Origin Policy).
+ *  Same caveat about '@' as url_same_host. */
 int url_same_origin(const url_view *a, const url_view *b);
 
 /** Write the RFC 3986 §6.2.2 canonical form: case-fold, drop default port, resolve dot segments. */
