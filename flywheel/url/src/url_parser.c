@@ -1348,7 +1348,6 @@ url_err url_parse_whatwg_stable(const char *s, size_t len,
     }
 
     /* 7. Hand off to the strict parser, then normalize empty components. */
-    if (norm_len_out) *norm_len_out = n;
     url_err e = url_parse(norm_buf, n, out);
     if (e == URL_OK) {
         if (out->query_len == 0)    out->query = NULL;
@@ -1371,8 +1370,13 @@ url_err url_parse_whatwg_stable(const char *s, size_t len,
                 if (out->query    && out->query    > out->host) out->query    -= removed;
                 if (out->fragment && out->fragment > out->host) out->fragment -= removed;
             }
+            /* After canonicalization shrinks n, memmove left stale bytes
+             * past the new end. Re-NUL-terminate so callers reading
+             * norm_buf as a C string see the correct length. */
+            norm_buf[n] = 0;
         }
     }
+    if (norm_len_out) *norm_len_out = n;
     return e;
 }
 
