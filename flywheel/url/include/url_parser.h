@@ -1,5 +1,27 @@
 /* url_parser.h — URL parsing, validation, resolution. Zero-copy views. */
 
+/**
+ * URL parser, validator, joiner, and builder.
+ *
+ * Layers:
+ *   url_parse / url_parse_ex     strict RFC 3986 parse
+ *   url_parse_whatwg_stable      WHATWG-compat (browser) parse
+ *   url_parse_auto               try strict, fall back to WHATWG
+ *   url_validate                 component-level validation after parse
+ *   url_join                     RFC 3986 §5.2 reference resolution
+ *   url_build_*                  reconstruct URL from a view
+ *   url_same_*                   RFC 6454 Same-Origin comparisons
+ *   url_canonicalize             RFC 3986 §6.2.2 canonical form
+ *
+ * Zero-copy design: every field in url_view points into the input, or
+ * into url_view.idna_storage for IDN hosts. No function in this header
+ * allocates. The caller owns the input buffer and must keep it alive
+ * for as long as any url_view referencing it is used.
+ *
+ * Parsing and validation are separate concerns (RFC 3986 §1.1.3).
+ * url_parse is permissive; url_validate applies the strict rules.
+ */
+
 #ifndef FLYWHEEL_URL_PARSER_H
 #define FLYWHEEL_URL_PARSER_H
 
@@ -76,83 +98,56 @@ typedef struct {
     char     idna_storage[512];
 } url_view;
 
-/* Parse into a view. Default flags (0) accept any RFC-valid scheme. */
+/** Parse a URL string, strict RFC 3986. Zero-copy view into `s`. */
 url_err url_parse(const char *s, size_t len, url_view *out);
+/** Same as url_parse, with flag-controlled acceptance (URL_F_*). */
 url_err url_parse_ex(const char *s, size_t len, uint32_t flags, url_view *out);
 
-/* WHATWG-compatible parse. Applies browser normalizations first:
- * strips tab/newline/whitespace, converts backslashes to slashes for
- * special schemes, fixes missing "//", expands integer IPv4 forms,
- * percent-decodes the host, then runs the strict parser.
- * Returns URL_ERR_* on unrecoverable inputs. */
+/** WHATWG (browser) parse — DEPRECATED; returns a view into a dead stack buffer. Use _stable. */
 url_err url_parse_whatwg(const char *s, size_t len, url_view *out)
     __attribute__((deprecated("use url_parse_whatwg_stable — this variant returns a view into a dead stack buffer")));
 
-/* WHATWG-compatible parse with caller-owned normalized buffer.
- *
- * url_parse_whatwg's returned url_view points into a function-local
- * scratch buffer that is dead when the function returns. This variant
- * writes the normalized URL into `norm_buf` (caller-owned) and returns
- * a view pointing into `norm_buf`.
- *
- * Lifetime contract: `norm_buf` MUST outlive any use of the returned
- * url_view. Typically the caller allocates it as a stack array in a
- * function that outlives the request.
- *
- * `norm_len_out` (optional) receives the number of bytes written.
- *
- * Returns URL_OK, URL_ERR_TOO_LONG if normalization exceeds norm_cap,
- * or any url_err from the strict parser. */
+/** WHATWG (browser) parse, writing the normalized URL into caller-owned norm_buf. */
 url_err url_parse_whatwg_stable(const char *s, size_t len,
                                 char *norm_buf, size_t norm_cap,
                                 size_t *norm_len_out, url_view *out);
 
-/** Validate a parsed view: percent-encoding in userinfo/path/query/fragment,
- *  IPv6 literal syntax. Returns URL_OK or the first component error.
- *
- *  Parsing is permissive (RFC 3986 §1.1.3 — parse and validate are
- *  separate concerns). Callers that need strict validation call this
- *  after url_parse() / url_parse_whatwg_stable(). */
+/** Strict component-level validation: percent-encoding, IPv6 syntax. */
 url_err url_validate(const url_view *u);
 
-/** Auto-chain parser: try url_parse() (strict, fast, no allocation).
- *  If strict rejects, fall back to url_parse_whatwg_stable() which
- *  preprocesses to browser-compatible form.
- *
- *  Same norm_buf lifetime contract as _stable — the returned url_view
- *  points into either the caller's input `s` (strict path, norm_len_out
- *  set to 0) or `norm_buf` (WHATWG path). Both must outlive the view. */
+/** Try url_parse first; fall back to url_parse_whatwg_stable if strict rejects. */
 url_err url_parse_auto(const char *s, size_t len,
                        char *norm_buf, size_t norm_cap,
                        size_t *norm_len_out, url_view *out);
 
-/* Resolve `rel` against `base`. Writes absolute URL into out. */
+/** Resolve relative reference `rel` against `base`, RFC 3986 §5.2. */
 url_err url_join(const url_view *base, const char *rel, size_t rel_len,
                  char *out, size_t out_cap, size_t *out_len);
 
-/* Build scheme://host[:port] into caller buffer. */
+/** Write scheme://host[:port] into caller buffer (port omitted if default). */
 url_err url_build_origin(const url_view *u, char *out, size_t cap, size_t *n);
 
-/* Build scheme://host[:port]/path[?query][#fragment] into caller buffer. */
+/** Write full URL verbatim — byte-exact inverse of url_parse. */
 url_err url_build_href(const url_view *u, char *out, size_t cap, size_t *n);
 
-/* Same as url_build_href, but percent-encodes unsafe bytes in path and query. */
+/** Like url_build_href, but percent-encodes unsafe path/query bytes for wire output. */
 url_err url_build_href_encoded(const url_view *u, char *out, size_t cap, size_t *n);
 
-/* Build scheme://[user:pass@]host[:port]/path[?query][#fragment]. */
+/** Like url_build_href, but include userinfo (user:pass@). Rarely safe to log. */
 url_err url_build_full(const url_view *u, char *out, size_t cap, size_t *n);
 
-/* Compare. 1 = equal, 0 = not. */
+/** 1 if hosts are equal, case-insensitive, trailing dots stripped, IDN in punycode. */
 int url_same_host(const url_view *a, const url_view *b);
+/** 1 if scheme + host + effective port all match (RFC 6454 Same-Origin Policy). */
 int url_same_origin(const url_view *a, const url_view *b);
 
-/* Case-fold + strip default port + dot-segment normalize into caller buffer. */
+/** Write the RFC 3986 §6.2.2 canonical form: case-fold, drop default port, resolve dot segments. */
 url_err url_canonicalize(const url_view *u, char *out, size_t cap, size_t *n);
 
-/* Return scheme default port, 0 if none. */
+/** Scheme's default port, 0 if the scheme has none or isn't known. */
 uint16_t url_scheme_default_port(const char *scheme, size_t len);
 
-/* Human-readable name for error code. Static string, never NULL. */
+/** Static human-readable name for a url_err value. Never NULL. */
 const char *url_err_name(url_err e);
 
 #endif
