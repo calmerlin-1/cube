@@ -1178,7 +1178,9 @@ url_err url_parse_whatwg_stable(const char *s, size_t len,
             if (buf[i] == '%') { has_pct = 1; break; }
         }
         if (has_pct) {
-            for (size_t i = userinfo_end; i < host_end && dlen + 1 < sizeof(decoded); i++) {
+            int overflow = 0;
+            for (size_t i = userinfo_end; i < host_end; i++) {
+                if (dlen + 1 >= sizeof(decoded)) { overflow = 1; break; }
                 if (buf[i] == '%' && i + 2 < host_end &&
                     isxdigit((unsigned char)buf[i+1]) && isxdigit((unsigned char)buf[i+2])) {
                     unsigned hi = (unsigned char)buf[i+1];
@@ -1191,6 +1193,7 @@ url_err url_parse_whatwg_stable(const char *s, size_t len,
                     decoded[dlen++] = buf[i];
                 }
             }
+            if (overflow) return URL_ERR_TOO_LONG;
             decoded[dlen] = 0;
             /* splice back: replace host bytes with decoded */
             size_t old_len = host_end - userinfo_end;

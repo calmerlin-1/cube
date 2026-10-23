@@ -85,7 +85,8 @@ url_err url_parse_ex(const char *s, size_t len, uint32_t flags, url_view *out);
  * special schemes, fixes missing "//", expands integer IPv4 forms,
  * percent-decodes the host, then runs the strict parser.
  * Returns URL_ERR_* on unrecoverable inputs. */
-url_err url_parse_whatwg(const char *s, size_t len, url_view *out);
+url_err url_parse_whatwg(const char *s, size_t len, url_view *out)
+    __attribute__((deprecated("use url_parse_whatwg_stable — this variant returns a view into a dead stack buffer")));
 
 /* WHATWG-compatible parse with caller-owned normalized buffer.
  *
