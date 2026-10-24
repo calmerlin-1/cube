@@ -391,10 +391,12 @@ static url_err parse_impl(const char *s, size_t len, uint32_t flags, url_view *o
 }
 
 url_err url_parse(const char *s, size_t len, url_view *out) {
+    if (!out) return URL_ERR_EMPTY;
     return parse_impl(s, len, 0, out);
 }
 
 url_err url_parse_ex(const char *s, size_t len, uint32_t flags, url_view *out) {
+    if (!out) return URL_ERR_EMPTY;
     return parse_impl(s, len, flags, out);
 }
 
@@ -709,7 +711,32 @@ url_err url_canonicalize(const url_view *u, char *out, size_t cap, size_t *n) {
         if (append(out, cap, &w, ":", 1)) return URL_ERR_BUFFER_TOO_SMALL;
         if (append_u16(out, cap, &w, u->port)) return URL_ERR_BUFFER_TOO_SMALL;
     }
-    if (append_tail(u, out, cap, &w)) return URL_ERR_BUFFER_TOO_SMALL;
+    /* Path: normalize dot segments (RFC 3986 §6.2.2.3) */
+    if (u->path_len > 0 || u->has_authority) {
+        char norm[8192];
+        const char *src = u->path;
+        size_t src_len = u->path_len;
+        if (src_len == 0 && u->has_authority) {
+            if (append(out, cap, &w, "/", 1)) return URL_ERR_BUFFER_TOO_SMALL;
+        } else {
+            size_t nlen = normalize_path(src, src_len, norm, sizeof norm, u->has_authority);
+            if (nlen > 0) {
+                if (append(out, cap, &w, norm, nlen)) return URL_ERR_BUFFER_TOO_SMALL;
+            } else {
+                if (append(out, cap, &w, src, src_len)) return URL_ERR_BUFFER_TOO_SMALL;
+            }
+        }
+    }
+    /* Query */
+    if (u->query_len > 0) {
+        if (append(out, cap, &w, "?", 1)) return URL_ERR_BUFFER_TOO_SMALL;
+        if (append(out, cap, &w, u->query, u->query_len)) return URL_ERR_BUFFER_TOO_SMALL;
+    }
+    /* Fragment */
+    if (u->fragment_len > 0) {
+        if (append(out, cap, &w, "#", 1)) return URL_ERR_BUFFER_TOO_SMALL;
+        if (append(out, cap, &w, u->fragment, u->fragment_len)) return URL_ERR_BUFFER_TOO_SMALL;
+    }
     if (n) *n = w;
     if (w < cap) out[w] = '\0';
     return URL_OK;
@@ -790,6 +817,20 @@ url_err url_validate(const url_view *u) {
         if (inet_pton(AF_INET6, h, &a6) != 1)
             return URL_ERR_IPV6_INVALID;
     }
+    /* Non-IPv6 host: reject bytes that can't appear in a reg-name (RFC 3986 §3.2.2) */
+    if (u->host && u->host_len > 0 && !u->is_ipv6) {
+        for (size_t i = 0; i < u->host_len; i++) {
+            unsigned char c = (unsigned char)u->host[i];
+            if (!( (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                   (c >= '0' && c <= '9') ||
+                   c == '-' || c == '.' || c == '_' || c == '~' ||
+                   c == '!' || c == '$' || c == '&' || c == '\'' ||
+                   c == '(' || c == ')' || c == '*' || c == '+' ||
+                   c == ',' || c == ';' || c == '=' || c == '%' ))
+                return URL_ERR_HOST_INVALID;
+        }
+    }
+
 
     return URL_OK;
 }
