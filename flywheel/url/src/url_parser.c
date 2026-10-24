@@ -8,7 +8,15 @@
 #include <string.h>
 #include <ctype.h>
 #include <stdlib.h>
-#include <arpa/inet.h>
+#ifdef _WIN32
+    #include <winsock2.h>
+    #include <ws2tcpip.h>
+    #ifndef inet_pton
+        #define inet_pton(fam, src, dst) InetPtonA(fam, src, dst)
+    #endif
+#else
+    #include <arpa/inet.h>
+#endif
 
 /* Runtime-configurable max URL length.
  * URL_MAX_LEN is a compat alias for URL_MAX_LEN_DEFAULT (external
@@ -165,7 +173,16 @@ static size_t normalize_path(const char *in, size_t in_len,
         }
         out[w++] = in[i++];
     }
-    if (w < out_cap) out[w] = 0;
+#if __STDC_VERSION__ >= 201112L
+    #define CUBE_THREAD_LOCAL _Thread_local
+#elif defined(__GNUC__) || defined(__clang__)
+    #define CUBE_THREAD_LOCAL __thread
+#elif defined(_MSC_VER)
+    #define CUBE_THREAD_LOCAL __declspec(thread)
+#else
+    #define CUBE_THREAD_LOCAL
+#endif
+static CUBE_THREAD_LOCAL const scheme_info *g_known_scheme = NULL;
     return w;
 }
 
@@ -661,7 +678,7 @@ url_err url_join(const url_view *base, const char *rel, size_t rel_len,
     }
 
     /* splice base directory + rel_path into a staging buffer */
-    char spliced[8192];
+    char spliced[2048];
     size_t splen = 0;
     if (prefix_len > sizeof(spliced)) return URL_ERR_JOIN_FAILED;
     memcpy(spliced, base_path, prefix_len);
@@ -671,7 +688,7 @@ url_err url_join(const url_view *base, const char *rel, size_t rel_len,
     splen += rel_path_len;
 
     /* normalize the path (not the tail) */
-    char norm[8192];
+    char norm[2048];
     size_t nlen = normalize_path(spliced, splen, norm, sizeof(norm), 1);
     if (nlen == 0) { nlen = splen; memcpy(norm, spliced, splen); }
 
@@ -713,7 +730,7 @@ url_err url_canonicalize(const url_view *u, char *out, size_t cap, size_t *n) {
     }
     /* Path: normalize dot segments (RFC 3986 §6.2.2.3) */
     if (u->path_len > 0 || u->has_authority) {
-        char norm[8192];
+        char norm[2048];
         const char *src = u->path;
         size_t src_len = u->path_len;
         if (src_len == 0 && u->has_authority) {

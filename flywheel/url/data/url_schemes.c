@@ -220,9 +220,12 @@ static int parse_conf_line(char *line, row *out) {
     char *flags_s = p;
     while (*p && *p != '\n' && *p != '\r') p++;
     *p = '\0';
+    char *endp = NULL;
+    long port_l = strtol(port_s, &endp, 10);
+    if (endp == port_s || *endp != '\0' || port_l < 1 || port_l > 65535)
+        return -1;
+    unsigned port = (unsigned)port_l;
 
-    unsigned port = (unsigned)atoi(port_s);
-    if (port > 65535) port = 0;
 
     unsigned char flags = 0;
     for (char *f = flags_s; *f; f++) {
