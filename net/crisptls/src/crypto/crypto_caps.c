@@ -21,7 +21,7 @@ static uint64_t realtime_ns(void) { return plat_realtime_ns(); }
 /* ---- benchmark helpers ---- */
 
 static double bench_aes128gcm(void) {
-    static uint8_t buf[65536], ct[65536 + 16];
+    static uint8_t buf[16384], ct[16384 + 16];
     uint8_t key[16] = {0}, nonce[12] = {0}, tag[16];
     size_t total = 0;
     uint64_t t0 = now_ns();
@@ -37,7 +37,7 @@ static double bench_aes128gcm(void) {
 }
 
 static double bench_aes256gcm(void) {
-    static uint8_t buf[65536], ct[65536 + 16];
+    static uint8_t buf[16384], ct[16384 + 16];
     uint8_t key[32] = {0}, nonce[12] = {0}, tag[16];
     size_t total = 0;
     uint64_t t0 = now_ns();
@@ -53,7 +53,7 @@ static double bench_aes256gcm(void) {
 }
 
 static double bench_chacha(void) {
-    static uint8_t buf[65536], ct[65536 + 16];
+    static uint8_t buf[16384], ct[16384 + 16];
     uint8_t key[32] = {0}, nonce[12] = {0}, tag[16];
     size_t total = 0;
     uint64_t t0 = now_ns();

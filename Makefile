@@ -27,7 +27,7 @@ JSON_INC       = flywheel/json/include
 UTILS_LIB      = utils/build/libutils.a
 UTILS_INC      = utils
 
-CFLAGS = -O2 -I. -Wall -Wextra \
+CFLAGS = -O2 -I. -Iutils -Wall -Wextra \
          -I$(CRISPTLS_INC) \
          -I$(DNS_INC) \
          -I$(TCP_INC) \
