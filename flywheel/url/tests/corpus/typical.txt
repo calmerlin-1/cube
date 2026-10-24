@@ -1,0 +1,26 @@
+# real-world URLs, ~80 bytes
+https://news.ycombinator.com/item?id=38982147
+https://www.google.com/search?q=url+parser+throughput
+https://github.com/torvalds/linux/blob/master/README
+https://en.wikipedia.org/wiki/URL
+https://stackoverflow.com/questions/12345/how-to-parse-urls
+https://www.reddit.com/r/programming/comments/abc123/
+https://twitter.com/user/status/1234567890
+https://www.youtube.com/watch?v=dQw4w9WgXcQ
+https://api.github.com/repos/torvalds/linux/issues
+https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js
+https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap
+https://analytics.example.com/collect?v=1&t=pageview&tid=UA-123456
+http://example.com:8080/api/v1/users/12345?fields=name,email
+https://user:pass@example.com/private/?token=abc123
+https://example.com/path/to/resource.html#section-4.2
+https://www.amazon.com/dp/B08N5WRWNW/ref=sr_1_1?keywords=keyboard
+https://mail.google.com/mail/u/0/#inbox/FMfcgzGqLmPZ
+https://docs.rs/tokio/latest/tokio/runtime/struct.Runtime.html
+https://developer.mozilla.org/en-US/docs/Web/API/URL
+https://raw.githubusercontent.com/rust-lang/rust/master/README.md
+https://s3.amazonaws.com/bucket/key/file.json?X-Amz-Signature=abc
+https://vimeo.com/123456789
+https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT
+https://discord.com/channels/123456789/987654321
+https://www.linkedin.com/in/someone

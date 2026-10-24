@@ -1,0 +1,129 @@
+/** range.c — print a line range.
+ * Supports:
+ *   10,20      lines 10 through 20
+ *   10+5       line 10 and the next 5 (lines 10-15)
+ *   /pat/      lines matching pattern
+ *   /s/,/e/    between start and end patterns
+ *   10,/e/     from 10 to next end pattern
+ */
+
+#include "erdict.h"
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+
+/* Parse o->range_str into (start, end). Returns 0 on success. */
+int erdict_parse_range(const erdict_file_t *f, const erdict_opts_t *o,
+                     size_t *out_start, size_t *out_end)
+{
+    const char *s = o->range_str;
+    if (!s || !*s) return -1;
+
+    /* N+K shorthand */
+    if (s[0] >= '0' && s[0] <= '9') {
+        char *end = NULL;
+        long n1 = strtol(s, &end, 10);
+        if (*end == '+') {
+            long k = strtol(end + 1, NULL, 10);
+            *out_start = (size_t)(n1 > 0 ? n1 - 1 : 0);
+            *out_end   = *out_start + (size_t)k;
+            return 0;
+        }
+        if (*end == ',' || *end == '-') {
+            long n2 = strtol(end + 1, NULL, 10);
+            *out_start = (size_t)(n1 > 0 ? n1 - 1 : 0);
+            *out_end   = (size_t)(n2 > 0 ? n2 - 1 : 0);
+            return 0;
+        }
+        /* bare N: single line N */
+        if (*end == '\0') {
+            *out_start = (size_t)(n1 > 0 ? n1 - 1 : 0);
+            *out_end   = *out_start;
+            return 0;
+        }
+    }
+
+    /* /pat/,/pat/ or /pat/ */
+    if (s[0] == '/') {
+        const char *e1 = strchr(s + 1, '/');
+        if (!e1) return -1;
+        char *p1 = erdict_xstrndup(s + 1, (size_t)(e1 - s - 1));
+        erdict_pattern_t *pa = erdict_pattern_regex(p1);
+        free(p1);
+        if (!pa) return -1;
+
+        size_t start = SIZE_MAX;
+        for (size_t i = 0; i < f->n_lines; i++) {
+            if (erdict_pattern_find(pa, f->lines[i].p, f->lines[i].len) != SIZE_MAX) {
+                start = i; break;
+            }
+        }
+        erdict_pattern_free(pa);
+        if (start == SIZE_MAX) return -1;
+
+        if (e1[1] == ',') {
+            const char *s2 = e1 + 2;
+            if (s2[0] == '/') {
+                const char *e2 = strrchr(s2 + 1, '/');
+                if (!e2) return -1;
+                char *p2 = erdict_xstrndup(s2 + 1, (size_t)(e2 - s2 - 1));
+                erdict_pattern_t *pb = erdict_pattern_regex(p2);
+                free(p2);
+                if (!pb) return -1;
+                size_t end = start;
+                for (size_t i = start + 1; i < f->n_lines; i++) {
+                    if (erdict_pattern_find(pb, f->lines[i].p, f->lines[i].len) != SIZE_MAX) {
+                        end = i; break;
+                    }
+                }
+                erdict_pattern_free(pb);
+                *out_start = start;
+                *out_end   = end;
+                return 0;
+            }
+        }
+        *out_start = start;
+        *out_end   = start;
+        return 0;
+    }
+    return -1;
+}
+
+int erdict_mode_range(const erdict_file_t *f, const erdict_opts_t *o) {
+    size_t s = 0, e = 0;
+    if (erdict_parse_range(f, o, &s, &e) != 0) {
+        erdict_err("bad range: %s", o->range_str ? o->range_str : "(null)");
+        return 2;
+    }
+    if (s >= f->n_lines) { erdict_err("start beyond EOF"); return 2; }
+    if (e >= f->n_lines) e = f->n_lines - 1;
+
+    size_t blank = 0, comment = 0, tw = 0, cr = 0;
+    printf("  %s   lines %zu-%zu  (%zu line%s)\n",
+           f->path, s + 1, e + 1, e - s + 1, e == s ? "" : "s");
+
+    for (size_t i = s; i <= e; i++) {
+        erdict_line_t *l = &f->lines[i];
+        erdict_ws_classify(f, l);
+        if (l->len == 0) blank++;
+        else {
+            const char *p = l->p;
+            while (*p == ' ' || *p == '\t') p++;
+            if (p[0] == '/' && p[1] == '/') comment++;
+            else if (p[0] == '/' && p[1] == '*') comment++;
+        }
+        if (l->trail) tw++;
+        if (l->cr) cr++;
+        erdict_print_line_plain(stdout, l);
+    }
+
+    {
+        char hbuf[17];
+        erdict_hash_range(f, s, e, hbuf);
+        printf("  hash: %s%s%s\n", COL.yellow, hbuf, COL.reset);
+    }
+    const char *C = COL.cyan, *Z = COL.reset;
+    printf("\n  %zu %slines%s · %zu %sblank%s · %zu %scomment%s · %zu %sTW%s · %zu %sCR%s\n",
+           e - s + 1, C, Z, blank, C, Z, comment, C, Z, tw, C, Z, cr, C, Z);
+    return 0;
+}

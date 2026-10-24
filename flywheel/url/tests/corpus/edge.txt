@@ -1,0 +1,24 @@
+# data URLs
+data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==
+data:text/plain,Hello%20World
+data:application/json,{"a":1}
+
+# base64 in query
+https://example.com/?redirect=aHR0cHM6Ly9leGFtcGxlLmNvbQ==
+https://example.com/?token=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.abc
+
+# double encoding
+https://example.com/%2520test
+https://example.com/%252f..%252fadmin
+https://example.com/path%20with%20spaces
+
+# unicode nested
+https://例え.jp/パス?キー=%E5%80%A4
+
+# mixed case scheme
+HtTpS://EXAMPLE.COM/Path
+
+# empty-ish
+https://
+https:///
+https://?q=1

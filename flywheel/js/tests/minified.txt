@@ -1,0 +1,11 @@
+!function(e,t){"object"==typeof exports&&"undefined"!=typeof module?t(exports):"function"==typeof define&&define.amd?define(["exports"],t):t((e="undefined"!=typeof globalThis?globalThis:e||self).mylib={})}(this,function(e){"use strict";function t(e,t){return e+t}function n(e){return e*2}e.add=t,e.dbl=n,Object.defineProperty(e,"__esModule",{value:!0})});
+var a=1,b=2,c=3,d=function(e){return e+1},f=(e,t)=>e*t,g=async e=>await fetch(e),h=class{constructor(e){this.x=e}get y(){return this.x*2}set y(v){this.x=v/2}},i=new h(1);
+const{x,y,...z}=obj,[a1,b1,...c1]=arr,{deep:{nested:{value}}}=data;
+for(let i=0;i<10;i++)sum+=i;for(const x of arr)print(x);for(const k in obj)log(k);
+if(a)b();else if(c)d();else e();
+a?b?c?d:e:f;x=y=z=0;a+=1;b-=2;c*=3;d/=4;e%=5;f**=6;
+switch(x){case 1:case 2:a();break;case 3:b();default:c()}
+try{risky()}catch(e){handle(e)}finally{cleanup()}
+u?.v?.w?.x?.y?.z;u??v??w??x??y??z;
+(()=>{})();(function(){})(this);(()=>{}).call(this);
+a&&b||c&&d||e&&f;

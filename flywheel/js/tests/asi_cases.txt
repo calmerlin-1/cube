@@ -1,0 +1,20 @@
+let a = 1
+let b = 2
+a + b
+function f() { return 1 }
+function g() { return
+1 }
+if (x)
+  y()
+for (let i = 0; i < 10; i++)
+  sum += i
+const x = 1
+const y = 2
+console.log(x + y)
+let arr = [1, 2, 3]
+let obj = { a: 1 }
+let n = arr.length
+return
+throw new Error('x')
+break
+continue

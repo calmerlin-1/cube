@@ -1,0 +1,89 @@
+!function(){}()
+(function(){})()
+void 0
+x=>x
+(x)=>x
+()=>{}
+(a,b)=>a+b
+(a=1,b=2)=>a+b
+({a,b})=>a+b
+([a,b])=>a+b
+(...args)=>args
+(a,...rest)=>rest
+async()=>{}
+async x=>x
+async(a,b)=>a
+(a,)=>a
+`${`${`${x}`}`}`
+a?.b?.[c]?.(d)
+a?.b.c
+new.target
+import.meta
+super.x
+this.x = 1
+delete a.b.c
+typeof typeof typeof x
+!!x
+~~x
+-x
++x
+!x
+void x
+a ** b ** c
+a = b = c = 0
+a += b -= c *= d
+a ?? b ?? c ?? d
+a && b || c && d
+a | b & c ^ d
+a << b >> c >>> d
+0 .toString()
+0..toString()
+1e10.toFixed(2)
+0x10.toString(16)
+(1).toString()
+x = {}.toString
+x = [].length
+x = [,,]
+x = [,1,,2,]
+x = {a:1,b:2,}
+x = {[a]:1,[b]:2}
+x = {a, b, c}
+x = {"a":1, 'b':2, 3:4}
+x = {async a(){}, *g(){}, get x(){}, set x(v){}}
+x = {f(){return 1}}
+x = class {}
+x = class extends B {}
+x = class Named {}
+function f() {}
+async function f() {}
+function* g() {}
+async function* h() {}
+for (;;) break
+for (a; b; c) d
+for (let a of b) c
+for await (const x of y) {}
+label: for(;;) { break label; continue label }
+switch (x) {}
+try{}catch{}
+try{}catch(e){}
+try{}finally{}
+do x; while (y)
+while (x) y
+if (x) y; else z
+if (x) { } else if (y) { }
+var a = 1, b = 2, c = 3
+let {a} = b
+let [a] = b
+let {a: {b: {c}}} = d
+let [a, [b, [c]]] = d
+let {a = 1} = b
+let [a = 1, b = 2] = c
+let {a, ...rest} = b
+let [a, ...rest] = b
+(function(){return function(){return function(){return 1}}})()()()
+a.b.c.d.e.f.g.h.i.j.k.l.m.n.o.p
+a[0][1][2][3][4][5][6][7][8][9]
+a().b().c().d()
+new a().b()
+new (a().b)()
+new new new a

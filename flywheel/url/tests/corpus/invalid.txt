@@ -1,0 +1,8 @@
+# things that should not parse, or parse with specific errors
+http://
+://nope
+http://a b/
+http://a.b:99999999/
+notaurl
+http://[unclosed/
+http://a.b:abc/

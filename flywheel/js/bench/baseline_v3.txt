@@ -1,0 +1,18 @@
+=== flywheel baseline benchmark ===
+  platform:  android  arch:  aarch64
+  iterations: 5000
+
+  cold parse                          18619077 ns total     3723.82 ns/op      268542 ops/s
+  cached parse                        13622154 ns total     2724.43 ns/op      367049 ops/s
+  cache: hits=9999 misses=2 entries=1/64 evictions=0
+  fresh Interp + eval expr             3130153 ns total     6260.31 ns/op      159737 ops/s
+  reuse Interp, eval expr              1469846 ns total      293.97 ns/op     3401717 ops/s
+
+  workloads:
+  loop 100                            45468692 ns total    45468.69 ns/op       21993 ops/s
+  loop 1k                             46581538 ns total   465815.38 ns/op        2147 ops/s
+  fib(15)                            221920538 ns total  2219205.38 ns/op         451 ops/s
+  array push 100                       8544538 ns total    85445.38 ns/op       11703 ops/s
+  string concat 100                    8712385 ns total    87123.85 ns/op       11478 ops/s
+
+  rss: 11444224 bytes

@@ -1,0 +1,4 @@
+build/
+erdict
+*.bak
+*.step0-bak

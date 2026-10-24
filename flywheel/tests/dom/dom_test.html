@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<body>
+  <div id="target">original</div>
+  <ul id="list"></ul>
+  <script>
+    var t = document.getElementById('target');
+    t.setAttribute('data-x', '42');
+    t.setTextContent('mutated');
+
+    var ul = document.getElementById('list');
+    var li1 = document.createElement('li');
+    li1.setTextContent('first');
+    ul.appendChild(li1);
+
+    var li2 = document.createElement('li');
+    li2.setTextContent('second');
+    ul.appendChild(li2);
+
+    console.log('script ran ok');
+  </script>
+</body>
+</html>

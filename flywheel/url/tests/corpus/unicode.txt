@@ -1,0 +1,12 @@
+# IDN, emoji, RTL, CJK
+http://例え.jp/
+https://münchen.de/straße
+http://例え.jp/パス
+https://भारत.in/
+https://例え.jp/パス?キー=値#フラグ
+https://münchen.de/straße?q=größe
+http://日本語.jp/中文/한국어
+https://例え.jp/🎉/emoji
+https://münchen.de/café/naïve/résumé
+http://xn--r8jz45g.jp/
+https://例え.jp/パス?キー=値#フラグ

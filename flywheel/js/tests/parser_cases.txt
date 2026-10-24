@@ -1,0 +1,49 @@
+1 + 2 * 3
+var x = 10
+let y = 20; const z = 30
+function add(a, b) { return a + b; }
+const f = (x) => x * 2
+const g = x => x * 2
+[1, 2, 3, ...[4, 5]]
+({ a: 1, b: 2, c: 3 })
+({ name: 'x', ['computed' + key]: 1 })
+if (x) { y() } else { z() }
+for (let i = 0; i < 10; i++) { sum += i }
+for (const x of arr) { print(x) }
+for (const k in obj) { print(k) }
+while (true) { break }
+do { x++ } while (x < 10)
+switch (x) { case 1: a(); break; default: b() }
+try { f() } catch (e) { g(e) } finally { h() }
+throw new Error('bad')
+class A { constructor(x) { this.x = x } }
+class B extends A { method() { return super.method() } }
+`hello ${name}`
+`${a} + ${b} = ${a + b}`
+a.b.c.d
+a[0][1][2]
+a?.b?.c
+a ?? b ?? c
+a && b || c
+!x && (y || z)
+typeof x === 'string'
+new Date()
+new Foo(1, 2, 3)
+x = y = z = 0
+a += 1; b -= 2; c *= 3
+x ? y : z
+foo(1, 2, 3)
+foo(...args)
+obj.method()
+obj?.method?.()
+(() => {})()
+async function main() { await fetch(url) }
+const { a, b } = obj
+const [x, y] = arr
+x ** 2 ** 3
+-a + +b - ~c
+a instanceof B
+'a' in obj
+void 0
+delete obj.x
+++x; x--; --x; x++

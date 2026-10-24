@@ -1,0 +1,5 @@
+# minimal URLs
+http://a.b/c
+https://a.b/
+http://a.b
+http://a.b/c/d/e

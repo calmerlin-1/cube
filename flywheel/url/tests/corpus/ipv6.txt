@@ -1,0 +1,5 @@
+http://[::1]:8080/path
+https://[2001:db8::1]/
+http://[::ffff:192.0.2.1]:80/index.html
+https://[fe80::1%25eth0]/local
+https://[2001:0db8:85a3:0000:0000:8a2e:0370:7334]:8443/api/v1/items
