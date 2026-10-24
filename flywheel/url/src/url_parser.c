@@ -269,7 +269,10 @@ static url_err parse_impl(const char *s, size_t len, uint32_t flags, url_view *o
     if (authority) {
         const char *at = NULL;
         for (size_t i = 0; i < authority_len; i++) {
-            if (authority[i] == '@') { at = authority + i; break; }
+            if (authority[i] == '@') {
+                if (at) return URL_ERR_HOST_INVALID;   /* second @ — reject */
+                at = authority + i;
+            }
         }
         const char *host_start;
         size_t host_area;
