@@ -287,37 +287,61 @@ static int commit_or_dryrun(const erdict_file_t *f, const erdict_opts_t *o,
     if (!o->apply) {
         printf("  %sdry run%s · %s · %zu bytes → %zu bytes\n",
                COL.dim, COL.reset, action, f->buf_len, nb_len);
+
+        /* Issue 10: show the exact lines being replaced before the write.
+         * o->r_start / o->r_end are 0-based (erdict_parse_range stores
+         * n-1; insert mode does f->lines[o->r_start]). Print human 1-based. */
+        if (!strcmp(action, "patch") &&
+            o->r_start < f->n_lines && o->r_end < f->n_lines) {
+            const erdict_line_t *first = &f->lines[o->r_start];
+            const erdict_line_t *last  = &f->lines[o->r_end];
+            int fw = (int)(first->len < 72 ? first->len : 72);
+            int lw = (int)(last->len  < 72 ? last->len  : 72);
+            printf("  %starget L%zu-%zu:%s\n",
+                   COL.cyan, o->r_start + 1, o->r_end + 1, COL.reset);
+            if (o->r_end > o->r_start) {
+                printf("    first  %s%.*s%s\n", COL.dim, fw, first->p, COL.reset);
+                printf("    last   %s%.*s%s\n", COL.dim, lw, last->p,  COL.reset);
+            } else {
+                printf("    line   %s%.*s%s\n", COL.dim, fw, first->p, COL.reset);
+            }
+        }
+
         printf("  %sl3%s     %s%s%s\n",
                COL.cyan, COL.reset,
                l3_ok ? COL.green : COL.red,
                l3_ok ? "OK" : "FAIL",
                COL.reset);
-        if (o->no_cc_check)
-            printf("  %scc%s     %sskipped (--no-cc-check)%s\n",
+        if (o->no_cc_check || o->force)
+            printf("  %scc%s     %sskipped%s\n",
                    COL.cyan, COL.reset, COL.yellow, COL.reset);
         printf("  %srun with --apply to write, journal, and cc-check%s\n", COL.dim, COL.reset);
         return 0;
     }
 
-    /* FIX 1: --force bypasses BOTH gates. Real build is authority. */
-    if (o->force) {
-        erdict_err("  --force: bypassing syntax and cc gates");
-    } else {
-        if (!l3_ok) {
-            erdict_err("refusing to write: result fails --syntax (unbalanced braces/quotes)");
+    /* l3 always runs, even with --force. --force only skips cc. */
+    if (!l3_ok) {
+        erdict_err("refusing to write: result fails --syntax (unbalanced braces/quotes)");
+        erdict_err("  the file %s was NOT modified", f->path);
+        erdict_err("  --force does not bypass l3");
+        if (!strcmp(action, "patch") &&
+            o->r_start < f->n_lines && o->r_end < f->n_lines) {
+            erdict_err("  target range was L%zu-%zu — verify with: erdict %s %zu,%zu",
+                       o->r_start + 1, o->r_end + 1, f->path,
+                       o->r_start + 1, o->r_end + 1);
+        }
+        return 1;
+    }
+    if (!o->force && !o->no_cc_check) {
+        if (!cc_check_buffer(nb, nb_len, f->path, o)) {
+            erdict_err("refusing to write: replacement fails cc -fsyntax-only");
             erdict_err("  the file %s was NOT modified", f->path);
-            erdict_err("  use --force to bypass");
+            erdict_err("  examine the scratch above, then delete it");
+            erdict_err("  use --force to bypass cc (l3 still runs)");
             return 1;
         }
-        if (!o->no_cc_check) {
-            if (!cc_check_buffer(nb, nb_len, f->path, o)) {
-                erdict_err("refusing to write: replacement fails cc -fsyntax-only");
-                erdict_err("  the file %s was NOT modified", f->path);
-                erdict_err("  examine the scratch above, then delete it");
-                erdict_err("  use --force to bypass");
-                return 1;
-            }
-        }
+    } else if (o->force) {
+        erdict_err("  --force: bypassing cc gate (l3 still enforced)");
     }
 
     if (!confirm_apply(action, o)) {
@@ -343,17 +367,20 @@ static int commit_or_dryrun(const erdict_file_t *f, const erdict_opts_t *o,
         erdict_journal_pop(f->path);
         return 2;
     }
-    printf("  %sapplied%s · %s · %zu → %zu bytes\n",
-           COL.green, COL.reset, action, f->buf_len, nb_len);
     if (o->rebuild) {
         printf("  %srebuild%s · running make -j4\n", COL.cyan, COL.reset);
         fflush(stdout);
         int mk = system("make -j4 2>&1 | tail -15");
         if (mk != 0) {
-            erdict_err("rebuild failed (make exit %d)", mk);
+            erdict_err("rebuild failed (make exit %d) — file written", mk);
+            printf("  %sapplied%s · %s · %zu → %zu bytes %s(rebuild failed)%s\n",
+                   COL.green, COL.reset, action, f->buf_len, nb_len,
+                   COL.yellow, COL.reset);
             return 3;
         }
     }
+    printf("  %sapplied%s · %s · %zu → %zu bytes\n",
+           COL.green, COL.reset, action, f->buf_len, nb_len);
     return 0;
 }
 
@@ -623,6 +650,7 @@ int erdict_mode_subst(const erdict_file_t *f, const erdict_opts_t *o) {
     out[len] = 0;
 
     int rc;
+
     if (!o->apply) {
         int l3_ok = l3_check_buffer(out, len, f->path);
         printf("  %sdry run%s · subst · %zu → %zu bytes · %zu hits\n",
@@ -631,38 +659,34 @@ int erdict_mode_subst(const erdict_file_t *f, const erdict_opts_t *o) {
                COL.cyan, COL.reset,
                l3_ok ? COL.green : COL.red, l3_ok ? "OK" : "FAIL", COL.reset);
         rc = 0;
-    } else if (o->force) {
-        erdict_err("  --force: bypassing syntax and cc gates");
-        size_t old_len = 0;
-        char *old = read_file_raw(f->path, &old_len);
-        if (!old) old_len = 0;
-        if (erdict_journal_append(f->path, old ? old : "", old_len,
-                                  out, len, "subst") != 0)
-        {
-            free(old);
-            erdict_err("journal failed; refusing to write");
-            free(out); free(repl); erdict_pattern_free(p); return 2;
-        }
-        free(old);
-        rc = write_back(f->path, out, len) == 0 ? 0 : 2;
-        if (rc == 0)
-            printf("  %sapplied%s · %zu → %zu bytes · %zu hits\n",
-                   COL.green, COL.reset, f->buf_len, len, hits);
-    } else {
+        goto done;
+    }
+
+    /* l3 always runs — same policy as commit_or_dryrun. --force only
+     * skips cc. A --force write of an l3-broken buffer is a tool defect. */
+    {
         int l3_ok = l3_check_buffer(out, len, f->path);
-        int cc_ok = o->no_cc_check ? 1 : cc_check_buffer(out, len, f->path, o);
         if (!l3_ok) {
             erdict_err("refusing to write: result fails --syntax (unbalanced braces/quotes)");
             erdict_err("  the file %s was NOT modified", f->path);
-            erdict_err("  use --force to bypass");
-            free(out); free(repl); erdict_pattern_free(p); return 1;
+            erdict_err("  --force does not bypass l3");
+            rc = 1;
+            goto done;
         }
+        int cc_ok = (o->force || o->no_cc_check) ? 1
+                                                : cc_check_buffer(out, len, f->path, o);
         if (!cc_ok) {
             erdict_err("refusing to write: replacement fails cc -fsyntax-only");
             erdict_err("  the file %s was NOT modified", f->path);
-            erdict_err("  use --force to bypass");
-            free(out); free(repl); erdict_pattern_free(p); return 1;
+            erdict_err("  use --force to bypass cc (l3 still runs)");
+            rc = 1;
+            goto done;
         }
+        if (o->force)
+            erdict_err("  --force: bypassing cc gate (l3 still enforced)");
+    }
+
+    {
         size_t old_len = 0;
         char *old = read_file_raw(f->path, &old_len);
         if (!old) old_len = 0;
@@ -671,7 +695,8 @@ int erdict_mode_subst(const erdict_file_t *f, const erdict_opts_t *o) {
         {
             free(old);
             erdict_err("journal failed; refusing to write");
-            free(out); free(repl); erdict_pattern_free(p); return 2;
+            rc = 2;
+            goto done;
         }
         free(old);
         rc = write_back(f->path, out, len) == 0 ? 0 : 2;
@@ -679,6 +704,8 @@ int erdict_mode_subst(const erdict_file_t *f, const erdict_opts_t *o) {
             printf("  %sapplied%s · %zu → %zu bytes · %zu hits\n",
                    COL.green, COL.reset, f->buf_len, len, hits);
     }
+
+done:
     free(out); free(repl); erdict_pattern_free(p);
     return rc;
 }

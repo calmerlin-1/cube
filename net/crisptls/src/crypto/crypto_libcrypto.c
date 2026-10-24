@@ -2,8 +2,6 @@
  * Alternative backend to crypto_sodium.c; pick one at link time. */
 
 #include "crypto.h"
-#include <openssl/evp.h>
-#include <openssl/core_names.h>
 #include <string.h>
 #include <fcntl.h>
 #include <unistd.h>

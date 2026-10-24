@@ -1,77 +1,25 @@
-# build artifacts
+build/
 *.o
 *.a
-/cube
-/net/**/build/
-/flywheel/**/build/
-/utils/build/
-
-# erdict journals and backups
+*.so
+*.dylib
+*.exe
+*.pre-*
 *.erdict-journal
+.erdict-scratch-*
 *.bak
-*.pre-*-bak
-*.final-bak
-*.fix*-bak
-*.incfrom-bak
-*.parserfix*-bak
-*.pre-mergecheck-bak
-*.pre-quietcheck-bak
-*.pre-nocheck-bak
-*.pre-anon*-bak
-*.pre-fix-broken-bak
-*.pre-lintfix-bak
-*.pre-regexfix-bak
-*.pre-asan-bak
-
-# scratch and captures
-/.tmp/
-/tests/.tmp/
-/core
-.core.*
-/.dns_probe.c
-.cc-scratch.c
-
-# cache files generated at runtime
-/net/dns/cache/hostname_cache.txt
-/net/dns/cache/upstream_scores.txt
-
-# runtime-generated crypto capability/policy cache
-net/crisptls/cache/crypto_caps.txt
-net/crisptls/cache/policy.generated.txt
-net/crisptls/cache/
-
-# nested prefix dirs from a relative-path bug in the policy generator
-# (see session notes: tool reads '../cache/crypto_caps.txt' from CWD)
-net/*/net/
-net/*/tools/net/
-tests/*/net/
-net/dns/src/cache/*.txt
-
-# dbug binary artifacts (sources are tracked)
-tools/dbug/shim.so
-tools/dbug/dbug
-tools/dbug/demo
-tools/dbug/build/
-
-# session-file backups
-*.bak-before-*
-*.bak-after-*
-*.bak-alpn-*
-*.pre-*-bak
-tests/.results/
-tests/*.bin
-
+*.swp
+*~
+.tmp/
+.tmp_*.bak
+tools/erdict/erdict
+/cube
+tests/url_dump
+tests/url_join_tester
+tests/url_ipv6_test
+tests/url_whatwg_test
+tests/url_cache_tester
+tests/scan_parity
+tests/url_throughput_tester
 tests/quic_probe
-
-# large test captures - prevent 1GB file accumulations
-.tmp/*.html
-.tmp/*.txt
-.tmp/*.bin
-
-# url test binaries
-flywheel/url/tests/url_dump
-flywheel/url/tests/url_whatwg_test
-flywheel/url/tests/url_throughput_tester
-.erdict-tmp/
-*.pre-batch*
-*.post-batch*
+net/dns/cache/

@@ -111,21 +111,34 @@ static char *blank_comments(const char *p, size_t n, int *in_block) {
     size_t i = 0;
     if (*in_block) {
         int closed = 0;
-        while (i + 1 < n) {
-            if (p[i] == '*' && p[i+1] == '/') { i += 2; closed = 1; break; }
+        while (i < n) {
+            if (i + 1 < n && p[i] == '*' && p[i+1] == '/') { i += 2; closed = 1; break; }
             out[i] = ' ';
             i++;
         }
         if (!closed) { *in_block = 1; return out; }
         *in_block = 0;
     }
-    while (i + 1 < n) {
-        if (p[i] == '/' && p[i+1] == '*') {
+    while (i < n) {
+        /* Skip past string and char literals — a "//" or "/*" inside a
+         * string (e.g. append(..., "//", 2)) is data, not a comment. We
+         * do not blank the string here (blank_strings runs later); we
+         * just step over it so its contents don't look like a comment. */
+        if (p[i] == '"' || p[i] == '\'') {
+            char q = p[i++];
+            while (i < n) {
+                if (p[i] == '\\' && i + 1 < n) { i += 2; continue; }
+                if (p[i] == q) { i++; break; }
+                i++;
+            }
+            continue;
+        }
+        if (i + 1 < n && p[i] == '/' && p[i+1] == '*') {
             out[i] = ' '; out[i+1] = ' ';
             size_t j = i + 2;
             int closed = 0;
-            while (j + 1 < n) {
-                if (p[j] == '*' && p[j+1] == '/') {
+            while (j < n) {
+                if (j + 1 < n && p[j] == '*' && p[j+1] == '/') {
                     out[j] = ' '; out[j+1] = ' ';
                     j += 2; closed = 1; break;
                 }
@@ -134,7 +147,7 @@ static char *blank_comments(const char *p, size_t n, int *in_block) {
             }
             if (!closed) { *in_block = 1; return out; }
             i = j;
-        } else if (p[i] == '/' && p[i+1] == '/') {
+        } else if (i + 1 < n && p[i] == '/' && p[i+1] == '/') {
             memset(out + i, ' ', n - i);
             return out;
         } else i++;
@@ -157,7 +170,7 @@ int erdict_symbols_scan(const erdict_file_t *f, erdict_sym_t **out, size_t *out_
         size_t rem_raw = l->len;
 
 
-        /* Blank out string contents in a copy of the line. */
+        /* Blank comments first, then strings. */
         char *nocom = blank_comments(raw, rem_raw, &in_block_comment);
         char *clean = blank_strings(nocom, rem_raw, &in_string);
         free(nocom);
