@@ -596,7 +596,11 @@ url_err url_build_full(const url_view *u, char *out, size_t cap, size_t *n) {
 }
 
 int url_same_host(const url_view *a, const url_view *b) {
-    return slice_ci_eq(a->host, a->host_len, b->host, b->host_len);
+    const char *ah = a->host; size_t al = a->host_len;
+    const char *bh = b->host; size_t bl = b->host_len;
+    while (al > 0 && ah[al - 1] == '.') al--;
+    while (bl > 0 && bh[bl - 1] == '.') bl--;
+    return slice_ci_eq(ah, al, bh, bl);
 }
 
 int url_same_origin(const url_view *a, const url_view *b) {
@@ -838,6 +842,7 @@ url_err url_validate(const url_view *u) {
     if (u->host && u->host_len > 0 && !u->is_ipv6) {
         for (size_t i = 0; i < u->host_len; i++) {
             unsigned char c = (unsigned char)u->host[i];
+            if (c == '@') return URL_ERR_HOST_INVALID;
             if (!( (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
                    (c >= '0' && c <= '9') ||
                    c == '-' || c == '.' || c == '_' || c == '~' ||
@@ -900,8 +905,9 @@ static int whatwg_parse_ipv4_part(const char *s, size_t n, unsigned *out) {
     size_t i = 0;
     if (n >= 2 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) {
         base = 16; i = 2;
-    } else if (n >= 1 && s[0] == '0') {
-        base = 8; i = 1;
+    } else if (n >= 2 && s[0] == '0') {
+        /* was: octal. WHATWG deprecated; treat as decimal to match strict path */
+        i = 0;
     }
     if (i >= n) { *out = 0; return 0; }   /* "0" or "0x" → 0 */
     unsigned v = 0;
@@ -1003,6 +1009,7 @@ static int whatwg_is_safe_byte_(unsigned char c, int is_query) {
 
 static size_t whatwg_encode_region(char *buf, size_t cap, size_t *n,
                                     size_t start, size_t end, int is_query) {
+    if (start > end || end > *n) return (size_t)-1;
     /* Count how many bytes need encoding (each costs +2 over the source byte) */
     size_t grown = 0;
     for (size_t i = start; i < end; i++) {
@@ -1010,7 +1017,7 @@ static size_t whatwg_encode_region(char *buf, size_t cap, size_t *n,
         if (!whatwg_is_safe_byte_(c, is_query)) grown += 2;
     }
     if (grown == 0) return 0;
-    if (*n + grown > cap) return (size_t)-1;
+    if (*n + grown >= cap) return (size_t)-1;
     /* Shift tail right (memmove right is safe; preserves NUL) */
     memmove(buf + end + grown, buf + end, *n - end + 1);
     /* Encode right-to-left */
@@ -1262,6 +1269,7 @@ url_err url_parse_whatwg_stable(const char *s, size_t len,
                 memcpy(buf + userinfo_end, decoded, dlen);
                 memmove(buf + userinfo_end + dlen, buf + host_end, n - host_end + 1);
                 n -= (old_len - dlen);
+                buf[n] = 0;
                 host_end = userinfo_end + dlen;
             } else {
                 if (n + (dlen - old_len) + 1 >= norm_cap) return URL_ERR_TOO_LONG;
@@ -1300,6 +1308,7 @@ url_err url_parse_whatwg_stable(const char *s, size_t len,
                     memcpy(buf + userinfo_end, expanded, el);
                     memmove(buf + userinfo_end + el, buf + host_end, n - host_end + 1);
                     n -= (old_len - el);
+                    buf[n] = 0;
                 } else {
                     if (n + (el - old_len) + 1 >= norm_cap) return URL_ERR_TOO_LONG;
                     memmove(buf + userinfo_end + el, buf + host_end, n - host_end + 1);
@@ -1325,9 +1334,14 @@ url_err url_parse_whatwg_stable(const char *s, size_t len,
             hs = scheme_end + 1;
             if (hs < n && buf[hs] == '/') hs++;
         }
+        int seen_at = 0;
         for (size_t i = hs; i < n; i++) {
             if (buf[i] == '/' || buf[i] == '?' || buf[i] == '#') break;
-            if (buf[i] == '@') hs = i + 1;
+            if (buf[i] == '@') {
+                if (seen_at) return URL_ERR_HOST_INVALID;
+                seen_at = 1;
+                hs = i + 1;
+            }
         }
         size_t he = hs;
         int is_ipv6 = (he < n && buf[he] == '[');
@@ -1350,6 +1364,7 @@ url_err url_parse_whatwg_stable(const char *s, size_t len,
             if (removed > 0) {
                 memmove(buf + trimmed, buf + he, n - he + 1);
                 n -= removed;
+                buf[n] = 0;
             }
         }
     }
@@ -1382,14 +1397,14 @@ url_err url_parse_whatwg_stable(const char *s, size_t len,
         if (scan < n && (buf[scan] == '/' || buf[scan] == '?' || buf[scan] == '#')) {
             size_t p_start = scan, p_end = scan;
             if (buf[scan] == '/') {
-                while (p_end < n && buf[p_end] != '?' && buf[p_end] != '#') p_end++;
+                while (p_end < n && buf[p_end] != '?' && buf[p_end] != '#' && buf[p_end] != '\0') p_end++;
             }
             size_t q_start = 0, q_end = 0, f_start = 0, f_end = 0;
             int has_q = 0, has_f = 0;
             if (p_end < n && buf[p_end] == '?') {
                 has_q = 1; q_start = p_end + 1;
                 size_t qe = q_start;
-                while (qe < n && buf[qe] != '#') qe++;
+                while (qe < n && buf[qe] != '#' && buf[qe] != '\0') qe++;
                 q_end = qe;
                 if (qe < n && buf[qe] == '#') { has_f = 1; f_start = qe + 1; f_end = n; }
             } else if (p_end < n && buf[p_end] == '#') {
@@ -1429,6 +1444,7 @@ url_err url_parse_whatwg_stable(const char *s, size_t len,
                         norm_buf + host_off + out->host_len,
                         n - host_off - out->host_len);
                 n -= removed;
+                norm_buf[n] = 0;
                 out->host_len -= removed;
                 if (out->path     && out->path     > out->host) out->path     -= removed;
                 if (out->query    && out->query    > out->host) out->query    -= removed;
