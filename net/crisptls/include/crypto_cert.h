@@ -22,7 +22,7 @@
  * n:     number of certs.
  * host:  SNI hostname the client connected to.
  * ca_bundle_path: PEM file with trusted root CAs. NULL → use env (SSL_CERT_FILE
- *                 then Termux default /data/data/com.termux/files/usr/etc/tls/cert.pem).
+ *                 then the OS default CA bundle (/etc/ssl/certs/ca-certificates.crt, etc.)).
  *
  * Returns CERT_OK on success, or one of the error codes above.
  * On success, *verified_chain_len_out (if non-NULL) is set to the number of

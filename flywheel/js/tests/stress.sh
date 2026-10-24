@@ -1,4 +1,4 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 # Flywheel lexer stress test — every case must exit 0 or 2 (error caught cleanly).
 # Any crash (segfault, timeout, exit>2) is a real bug.
 

@@ -1,4 +1,4 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 # Confirm stateless-reset hypothesis by dumping rsp[0..120] from quic_probe.
 set -eu
 cd "$(dirname "$0")"

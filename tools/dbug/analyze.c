@@ -91,7 +91,6 @@ static int find_import(const char *raw, size_t raw_len, const char *src,
         }
     }
     static const char *INCS[] = {
-        "/data/data/com.termux/files/usr/include",
         "/usr/include", "/usr/local/include", NULL };
     for (int i = 0; INCS[i]; i++)
         if (try_path(INCS[i], name, out, outsz)) return 1;

@@ -149,8 +149,8 @@ static int resolve(const char *host, char *ip_out, size_t cap, int *fam_out) {
     /* Otherwise ask cube's DNS resolver. */
     dns_resolver_t *r = dns_resolver_new_default();
     if (!r) return -1;
-    dns_resolver_set_persist(r, "/data/data/com.termux/files/home/osint/cube/net/dns/cache/upstream_scores.txt");
-    dns_resolver_set_cache_path(r, "/data/data/com.termux/files/home/osint/cube/net/dns/cache/hostname_cache.txt");
+    /* DNS cache persistence disabled — was Termux-specific path. */
+    /* Enable with dns_resolver_set_persist(r, getenv("HOME")-based path) if needed. */
     dns_answer_t ans; memset(&ans, 0, sizeof(ans));
     if (dns_resolve_dual(r, host, &ans) != DNS_OK) { dns_resolver_free(r); return -1; }
     int found = 0;

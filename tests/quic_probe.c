@@ -407,7 +407,7 @@ int main(int argc, char **argv) {
         udp_close(fd);
         return 11;
     }
-        { FILE *f_ = fopen("/data/data/com.termux/files/home/osint/cube/.tmp/quic_out.bin","wb"); if (f_) { fwrite(pkt,1,p,f_); fclose(f_); } }
+        { FILE *f_ = fopen("/tmp/quic_out.bin","wb"); if (f_) { fwrite(pkt,1,p,f_); fclose(f_); } }
 if (udp_send(fd, pkt, p, 5000) != 0) {
         fprintf(stderr, "udp_send failed\n");
         udp_close(fd);
