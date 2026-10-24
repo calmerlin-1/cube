@@ -40,3 +40,9 @@ net/crisptls/cache/
 tests/.results/
 **/cache/
 **/.results/
+
+# Compiled binaries tracked by accident
+flywheel/url/tests/scan_parity
+tools/dbug/dbug
+tools/dbug/demo
+tools/sear/sear
