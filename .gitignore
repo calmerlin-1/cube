@@ -1,25 +1,42 @@
+# Build artifacts
 build/
 *.o
 *.a
 *.so
 *.dylib
 *.exe
+
+# Erdict backups, scratch, journals
 *.pre-*
 *.erdict-journal
 .erdict-scratch-*
+
+# Editor / temp
 *.bak
 *.swp
 *~
 .tmp/
 .tmp_*.bak
+*.dns_probe.c
+.dns_probe.c
+
+# Compiled binaries (from source)
 tools/erdict/erdict
 /cube
-tests/url_dump
-tests/url_join_tester
-tests/url_ipv6_test
-tests/url_whatwg_test
-tests/url_cache_tester
-tests/scan_parity
-tests/url_throughput_tester
-tests/quic_probe
+
+# Test binaries — anywhere in tree
+**/tests/url_dump
+**/tests/url_join_tester
+**/tests/url_ipv6_test
+**/tests/url_whatwg_test
+**/tests/url_cache_tester
+**/tests/scan_parity
+**/tests/url_throughput_tester
+**/tests/quic_probe
+
+# Caches and runtime data
 net/dns/cache/
+net/crisptls/cache/
+tests/.results/
+**/cache/
+**/.results/
