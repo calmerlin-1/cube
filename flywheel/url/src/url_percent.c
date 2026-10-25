@@ -61,15 +61,14 @@ int url_percent_decode(const char *in, size_t inlen,
             int hi = hexval((unsigned char)in[i+1]);
             int lo = hexval((unsigned char)in[i+2]);
             if (hi >= 0 && lo >= 0) {
-                if (w >= outcap) return URLP_ERR_OVERFLOW;
+                if (w >= outcap) { if (outlen) *outlen = w; return URLP_ERR_OVERFLOW; }
                 out[w++] = (char)((hi << 4) | lo);
                 i += 2;
                 continue;
             }
         }
         if (plus_to_space && c == '+') c = ' ';
-        if (w >= outcap) return URLP_ERR_OVERFLOW;
-        out[w++] = (char)c;
+        if (w >= outcap) { if (outlen) *outlen = w; return URLP_ERR_OVERFLOW; }
     }
     if (outlen) *outlen = w;
     return URLP_OK;

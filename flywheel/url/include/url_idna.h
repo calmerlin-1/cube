@@ -17,7 +17,9 @@
 int url_idna_to_ascii(const char *in, size_t inlen,
                       char *out, size_t outcap, size_t *outlen);
 
-/* Decode an ASCII hostname (xn-- labels) back into UTF-8. Best-effort. */
+/* Copy ASCII hostname verbatim. NOT a punycode decoder — xn-- labels are
+ * preserved as-is. Provided for symmetry with url_idna_to_ascii; callers
+ * who need real decoding must bring their own. */
 int url_idna_to_unicode(const char *in, size_t inlen,
                         char *out, size_t outcap, size_t *outlen);
 

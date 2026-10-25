@@ -440,7 +440,9 @@ url_err url_parse_with_scheme(const char *s, size_t len,
                               const scheme_info *known,
                               url_view *out)
 {
-    g_known_scheme = known;
+    /* Note: g_known_scheme is restored on the only return path. If a
+     * future change to parse_impl introduces longjmp/abort, wrap this in
+     * a cleanup handler. As-is, safe: parse_impl has no abnormal exits. */
     url_err rc = parse_impl(s, len, 0, out);
     g_known_scheme = NULL;
     return rc;

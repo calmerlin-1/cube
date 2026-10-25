@@ -194,6 +194,7 @@ int url_idna_to_ascii(const char *in, size_t inlen,
         while (j < inlen && in[j] != '.') j++;
         size_t lbl = j - i;
         if (lbl > 0) {
+            if (lbl > 63) return URLI_ERR_TOO_LONG;   /* RFC 1035 label limit */
             size_t lw = 0;
             int r = idna_encode_label(in + i, lbl, out + w, outcap - w, &lw);
             if (r) return r;
