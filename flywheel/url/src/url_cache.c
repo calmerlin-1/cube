@@ -107,9 +107,20 @@ static void rebase_view(url_view *dst, const url_view *src, const char *base) {
     memset(dst, 0, sizeof(*dst));
     dst->raw     = base;
     dst->raw_len = src->raw_len;
+    memcpy(dst->idna_storage, src->idna_storage, sizeof dst->idna_storage);
+
 #define REB(field) \
     if (src->field) { \
-        dst->field = base + (size_t)(src->field - src->raw); \
+        if (src->field >= src->raw && src->field < src->raw + src->raw_len) { \
+            dst->field = base + (size_t)(src->field - src->raw); \
+        } else if (src->field >= src->idna_storage && \
+                   src->field <  src->idna_storage + sizeof src->idna_storage) { \
+            dst->field = dst->idna_storage + (size_t)(src->field - src->idna_storage); \
+        } else if (src->field##_len == 1 && *src->field == '/') { \
+            dst->field = "/"; \
+        } else { \
+            dst->field = NULL; \
+        } \
     } else { \
         dst->field = NULL; \
     } \
@@ -127,7 +138,6 @@ static void rebase_view(url_view *dst, const url_view *src, const char *base) {
     dst->is_default_port = src->is_default_port;
     dst->has_authority   = src->has_authority;
 }
-
 static int store(url_cache_t *c, uint64_t hash,
                  const char *url, size_t url_len,
                  url_err err, const url_view *v)
@@ -143,14 +153,21 @@ static int store(url_cache_t *c, uint64_t hash,
             size_t slot = first_tombstone != (size_t)-1 ? first_tombstone : i;
             entry_t *dst = &c->slots[slot];
             memset(dst, 0, sizeof(*dst));
+            /* C1/C5: allocate URL copy BEFORE touching hash — on malloc
+             * failure the slot stays empty, never poisoned */
+            char *url_copy = NULL;
+            if (err == URL_OK) {
+                if (url_len >= SIZE_MAX - 1) return -1;   /* C8: overflow guard */
+                url_copy = malloc(url_len + 1);
+                if (!url_copy) return -1;
+                memcpy(url_copy, url, url_len);
+                url_copy[url_len] = 0;
+            }
             dst->hash = hash ? hash : 2;
             dst->lru  = ++c->tick;
             dst->error = err;
             if (err == URL_OK) {
-                dst->url = malloc(url_len + 1);
-                if (!dst->url) return -1;
-                memcpy(dst->url, url, url_len);
-                dst->url[url_len] = 0;
+                dst->url = url_copy;
                 dst->url_len = url_len;
                 rebase_view(&dst->view, v, dst->url);
             }

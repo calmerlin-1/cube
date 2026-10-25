@@ -12,7 +12,8 @@
 #define URLP_ERR_BAD_UTF8 2  /* invalid UTF-8 sequence after decode */
 #define URLP_ERR_OVERFLOW 3  /* output buffer too small */
 
-/* Decode percent-sequences in `in` into `out`.
+/* Decode percent-sequences in `in` into `out`. **Out is not NUL-terminated.**
+ *  Use *outlen, not strlen().
  * Invalid hex sequences are passed through literally (browser behavior).
  * `plus_to_space` — 1 for query strings, 0 for paths.
  * Returns URLP_OK or URLP_ERR_OVERFLOW. */

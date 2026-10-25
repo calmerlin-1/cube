@@ -107,9 +107,25 @@ static size_t utf8_decode(const char *s, size_t n, unsigned *cp) {
     unsigned char c = (unsigned char)s[0];
     if (c < 0x80) { *cp = c; return 1; }
     if (c < 0xC2) return 0;
-    if (c < 0xE0) { if (n < 2) return 0; *cp = ((c & 0x1F) << 6) | (s[1] & 0x3F); return 2; }
-    if (c < 0xF0) { if (n < 3) return 0; *cp = ((c & 0x0F) << 12) | ((s[1] & 0x3F) << 6) | (s[2] & 0x3F); return 3; }
-    if (c < 0xF5) { if (n < 4) return 0; *cp = ((c & 0x07) << 18) | ((s[1] & 0x3F) << 12) | ((s[2] & 0x3F) << 6) | (s[3] & 0x3F); return 4; }
+    if (c < 0xE0) {
+        if (n < 2 || (s[1] & 0xC0) != 0x80) return 0;
+        *cp = ((c & 0x1F) << 6) | (s[1] & 0x3F);
+        return 2;
+    }
+    if (c < 0xF0) {
+        if (n < 3 || (s[1] & 0xC0) != 0x80 || (s[2] & 0xC0) != 0x80) return 0;
+        if (c == 0xE0 && (unsigned char)s[1] < 0xA0) return 0;  /* overlong */
+        if (c == 0xED && (unsigned char)s[1] >= 0xA0) return 0; /* surrogate */
+        *cp = ((c & 0x0F) << 12) | ((s[1] & 0x3F) << 6) | (s[2] & 0x3F);
+        return 3;
+    }
+    if (c < 0xF5) {
+        if (n < 4 || (s[1] & 0xC0) != 0x80 || (s[2] & 0xC0) != 0x80 || (s[3] & 0xC0) != 0x80) return 0;
+        if (c == 0xF0 && (unsigned char)s[1] < 0x90) return 0;  /* overlong */
+        if (c == 0xF4 && (unsigned char)s[1] >= 0x90) return 0; /* > U+10FFFF */
+        *cp = ((c & 0x07) << 18) | ((s[1] & 0x3F) << 12) | ((s[2] & 0x3F) << 6) | (s[3] & 0x3F);
+        return 4;
+    }
     return 0;
 }
 
@@ -145,11 +161,11 @@ static int idna_encode_label(const char *in, size_t inlen,
     }
 
     /* decode UTF-8 into codepoints */
-    unsigned cp[256];
+    unsigned cp[1024];
     size_t n = 0;
     size_t i = 0;
     while (i < inlen) {
-        if (n >= 256) return URLI_ERR_TOO_LONG;
+        if (n >= 1024) return URLI_ERR_TOO_LONG;
         size_t cl = utf8_decode(in + i, inlen - i, &cp[n]);
         if (cl == 0) return URLI_ERR_BAD_UTF8;
         n++;

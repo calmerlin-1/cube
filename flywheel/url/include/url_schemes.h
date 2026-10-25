@@ -41,6 +41,7 @@ typedef struct {
 int url_scheme_lookup(const char *scheme, size_t len, scheme_info *out);
 
 /** Load extra schemes from a conf file, replacing any previously loaded set.
+ *  **Not thread-safe with url_scheme_lookup.** Call before spawning threads.
  *  Returns the number of schemes loaded (may be 0).
  *  Returns -1 if conf_path is NULL or the file cannot be opened.
  *  On allocation failure mid-load, returns the count loaded so far.
