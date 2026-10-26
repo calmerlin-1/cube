@@ -412,7 +412,7 @@ int tcp_range_nth(const char *start_ip, long n, char *out, size_t cap) {
     struct in_addr a;
     if (inet_pton(AF_INET, start_ip, &a) != 1) return -1;
     uint32_t base = ntohl(a.s_addr);
-    if ((uint64_t)base + (uint64_t)n > 0xFFFFFFFFull) { errno = ERANGE; return -1; }
+    if ((uint64_t)base + (uint64_t)n > 0xFFFFFFFFull) { cube_set_errno_inval(); return -1; }
     uint32_t cur = base + (uint32_t)n;
     struct in_addr c; c.s_addr = htonl(cur);
     return inet_ntop(AF_INET, &c, out, (socklen_t)cap) ? 0 : -1;
