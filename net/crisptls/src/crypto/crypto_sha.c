@@ -5,9 +5,7 @@
 #include "crypto.h"
 #include <string.h>
 
-/* ============================================================
- * SHA-256 (FIPS 180-4 §6.2)
- * ============================================================ */
+/* SHA-256 (FIPS 180-4 §6.2) */
 
 typedef struct {
     uint32_t h[8];
@@ -101,9 +99,7 @@ int ct_sha256(const uint8_t *data, size_t len, uint8_t out[32]) {
     return 0;
 }
 
-/* ============================================================
- * SHA-512 (FIPS 180-4 §6.5)
- * ============================================================ */
+/* SHA-512 (FIPS 180-4 §6.5) */
 
 typedef struct {
     uint64_t h[8];
@@ -217,9 +213,7 @@ int ct_sha512(const uint8_t *data, size_t len, uint8_t out[64]) {
     return 0;
 }
 
-/* ============================================================
- * SHA-384 — SHA-512 with different IV, truncate to 48 bytes.
- * ============================================================ */
+/* SHA-384 — SHA-512 with different IV, truncate to 48 bytes. */
 
 int ct_sha384(const uint8_t *data, size_t len, uint8_t out[48]) {
     sha512_ctx_t c;
@@ -235,11 +229,7 @@ int ct_sha384(const uint8_t *data, size_t len, uint8_t out[48]) {
     return 0;
 }
 
-/* ============================================================
- * Public streaming API — thin wrappers around the internal helpers.
- * The internal sha256_ctx_t / sha512_ctx_t are layout-compatible
- * with the public ct_sha256_ctx_t / ct_sha512_ctx_t declared in crypto.h.
- * ============================================================ */
+/* Public streaming API — thin wrappers around the internal helpers. The internal sha256_ctx_t / sha512_ctx_t are layout-compatible with the public ct_sha256_ctx_t / ct_sha512_ctx_t declared in crypto.h. */
 
 /* _Static_assert layout compatibility at build time */
 _Static_assert(sizeof(sha256_ctx_t) == sizeof(ct_sha256_ctx_t),
@@ -288,9 +278,7 @@ void ct_sha384_final(ct_sha384_ctx_t *c, uint8_t out[48]) {
     memcpy(out, full, 48);
 }
 
-/* ============================================================
- * SHA-1 (FIPS 180-4 §6.1) — needed for TLS 1.2 CBC-HMAC-SHA1 suites.
- * ============================================================ */
+/* SHA-1 (FIPS 180-4 §6.1) — needed for TLS 1.2 CBC-HMAC-SHA1 suites. */
 
 static void sha1_compress(uint32_t st[5], const uint8_t blk[64]) {
     uint32_t w[80];

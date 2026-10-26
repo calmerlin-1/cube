@@ -13,9 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* ============================================================ */
 /* Arena                                                         */
-/* ============================================================ */
 typedef struct ArenaBlock {
     struct ArenaBlock *next;
     size_t used;
@@ -102,9 +100,7 @@ Node *ast_new(NodeKind k, int line, int col, int end_line, int end_col) {
     return ast_new_sized(k, sizeof(Node), line, col, end_line, end_col);
 }
 
-/* ============================================================ */
 /* Kind names                                                    */
-/* ============================================================ */
 const char *ast_kind_name(NodeKind k) {
     static const char *names[NODE_MAX] = {
         /* top */
@@ -134,9 +130,7 @@ const char *ast_kind_name(NodeKind k) {
     return names[k];
 }
 
-/* ============================================================ */
 /* Printer — S-expr. Never crashes; prints "(null)" for NULL.    */
-/* ============================================================ */
 static void ind(int n) { for (int i = 0; i < n; i++) fputs("  ", stdout); }
 
 static const char *binop_name(BinaryOp op) {
@@ -407,9 +401,7 @@ void ast_print(Node *n, int indent) {
     putchar(')');
 }
 
-/* ============================================================ */
 /* Arena head accessors — used by src/cache.c to swap arenas    */
-/* ============================================================ */
 void *ast_arena_head(void) {
     return (void *)g_head;
 }

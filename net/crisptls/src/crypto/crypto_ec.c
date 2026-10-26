@@ -13,10 +13,10 @@
 
 
 
-/* ==================== P-256 ECDH ==================== */
+/* P-256 ECDH */
 
 
-/* ==================== Signature verify ==================== */
+/* Signature verify */
 
 /** Load a public key from DER (SPKI format). */
 static EVP_PKEY *pubkey_from_der(const uint8_t *der, size_t der_len) {
@@ -90,7 +90,7 @@ out:
     return rc;
 }
 
-/* ==================== Cert helpers ==================== */
+/* Cert helpers */
 
 /** Extract SubjectPublicKeyInfo DER from a full certificate DER.
  * Returns 0 on success, sets out/out_len. */

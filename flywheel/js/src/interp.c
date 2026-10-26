@@ -24,9 +24,7 @@
 #include <stdio.h>
 #include <math.h>
 
-/* ============================================================ */
 /* Error helpers                                                */
-/* ============================================================ */
 Value flywheel_err(Interp *I, const char *msg, Node *where) {
     if (!I->has_error) {
         I->has_error = 1;
@@ -50,9 +48,7 @@ Value flywheel_errf(Interp *I, Node *where, const char *fmt, ...) {
     return flywheel_err(I, buf, where);
 }
 
-/* ============================================================ */
 /* Forward declarations                                         */
-/* ============================================================ */
 static Value eval_expr(Interp *I, Env *env, Node *n);
 static Value eval_expr_impl(Interp *I, Env *env, Node *n);
 static Value eval_binary(Interp *I, Env *env, BinaryExpr *b);
@@ -82,9 +78,7 @@ static Value eval_switch(Interp *I, Env *env, SwitchStmt *sw);
 static Value eval_try(Interp *I, Env *env, TryStmt *tr);
 static Value eval_throw(Interp *I, Env *env, ThrowStmt *th);
 
-/* ============================================================ */
 /* Interp lifecycle                                             */
-/* ============================================================ */
 Interp *flywheel_new(void) {
     Interp *I = (Interp *)calloc(1, sizeof(Interp));
     if (!I) return NULL;
@@ -172,9 +166,7 @@ void flywheel_set_global(Interp *I, const char *name, Value v) {
     env_define(I, I->globals, name, v, 1);
 }
 
-/* ============================================================ */
 /* Literals                                                     */
-/* ============================================================ */
 static Value eval_literal(Interp *I, Literal *lit) {
     switch (lit->lit_kind) {
     case LIT_NUMBER:    return val_number(lit->number);
@@ -196,9 +188,7 @@ static Value eval_literal(Interp *I, Literal *lit) {
     return flywheel_err(I, "eval_literal: unknown literal kind", (Node *)lit);
 }
 
-/* ============================================================ */
 /* Identifier lookup                                            */
-/* ============================================================ */
 static Value eval_ident(Interp *I, Env *env, Ident *id) {
     if (!id->name) return flywheel_err(I, "eval_ident: unnamed identifier", (Node *)id);
 
@@ -220,9 +210,7 @@ static Value eval_ident(Interp *I, Env *env, Ident *id) {
     return flywheel_errf(I, (Node *)id, "%s is not defined", id->name);
 }
 
-/* ============================================================ */
 /* Binary operators                                             */
-/* ============================================================ */
 static Value eval_binary(Interp *I, Env *env, BinaryExpr *b) {
     Value L = eval_expr(I, env, b->left);
     if (I->has_error) return val_undefined();
@@ -331,9 +319,7 @@ static Value eval_binary(Interp *I, Env *env, BinaryExpr *b) {
     return flywheel_err(I, "eval_binary: unknown operator", (Node *)b);
 }
 
-/* ============================================================ */
 /* Unary operators                                              */
-/* ============================================================ */
 static Value eval_unary(Interp *I, Env *env, UnaryExpr *u) {
     if (u->op == UNOP_TYPEOF && u->arg && u->arg->kind == NODE_IDENT) {
         Ident *tid = (Ident *)u->arg;
@@ -385,9 +371,7 @@ static Value eval_unary(Interp *I, Env *env, UnaryExpr *u) {
     return flywheel_err(I, "eval_unary: unknown operator", (Node *)u);
 }
 
-/* ============================================================ */
 /* Logical && || ??                                             */
-/* ============================================================ */
 static Value eval_logical(Interp *I, Env *env, LogicalExpr *l) {
     Value L = eval_expr(I, env, l->left);
     if (I->has_error) return val_undefined();
@@ -408,9 +392,7 @@ static Value eval_logical(Interp *I, Env *env, LogicalExpr *l) {
     return flywheel_err(I, "eval_logical: unknown operator", (Node *)l);
 }
 
-/* ============================================================ */
 /* Expression dispatcher                                        */
-/* ============================================================ */
 static Value eval_expr(Interp *I, Env *env, Node *n) {
     if (!g_cat_enabled) return eval_expr_impl(I, env, n);
     if (!n) return val_undefined();
@@ -562,16 +544,7 @@ static Value eval_expr_impl(Interp *I, Env *env, Node *n) {
     }
 }
 
-/* ============================================================ */
-/* Program / statement evaluation                               */
-/* ============================================================ */
-/* ============================================================ */
-/* Assignment                                                   */
-/* ============================================================ */
-/* ============================================================ */
-/* Array literals                                               */
-/* ============================================================ */
-static Value eval_array_lit(Interp *I, Env *env, ArrayExpr *a) {
+/* Array literals                                               */static Value eval_array_lit(Interp *I, Env *env, ArrayExpr *a) {
     if (I->has_error) return val_undefined();
     Object *arr = array_new(I);
     if (!arr) return val_undefined();
@@ -593,9 +566,7 @@ static Value eval_array_lit(Interp *I, Env *env, ArrayExpr *a) {
     return out;
 }
 
-/* ============================================================ */
 /* Object literals                                              */
-/* ============================================================ */
 static Value eval_object_lit(Interp *I, Env *env, ObjectExpr *o) {
     if (I->has_error) return val_undefined();
     Object *obj = object_new(I);
@@ -671,9 +642,7 @@ static Value eval_object_lit(Interp *I, Env *env, ObjectExpr *o) {
     return out;
 }
 
-/* ============================================================ */
 /* Member access: obj.key, obj[key], arr[i]                     */
-/* ============================================================ */
 static Value eval_member(Interp *I, Env *env, MemberExpr *m) {
     if (I->has_error) return val_undefined();
     Value base = eval_expr(I, env, m->object);
@@ -838,9 +807,7 @@ static Value eval_member(Interp *I, Env *env, MemberExpr *m) {
     return own;
 }
 
-/* ============================================================ */
 /* Member assignment: obj.key = v, arr[i] = v                   */
-/* ============================================================ */
 static Value eval_member_assign(Interp *I, Env *env, MemberExpr *m, Value v) {
     if (I->has_error) return val_undefined();
     Value base = eval_expr(I, env, m->object);
@@ -879,9 +846,7 @@ static Value eval_member_assign(Interp *I, Env *env, MemberExpr *m, Value v) {
     return v;
 }
 
-/* ============================================================ */
 /* new expression — basic: create object, call constructor      */
-/* ============================================================ */
 static Value eval_new(Interp *I, Env *env, NewExpr *n) {
     if (I->has_error) return val_undefined();
 
@@ -928,9 +893,7 @@ static Value eval_new(Interp *I, Env *env, NewExpr *n) {
     return thisv;
 }
 
-/* ============================================================ */
 /* Functions                                                    */
-/* ============================================================ */
 static Value eval_func_decl(Interp *I, Env *env, FuncNode *f) {
     if (I->has_error) return val_undefined();
     if (!f) return flywheel_err(I, "eval_func_decl: null", NULL);
@@ -955,9 +918,7 @@ static Value eval_func_decl(Interp *I, Env *env, FuncNode *f) {
     return fv;
 }
 
-/* ============================================================ */
 /* Template literals: `hello ${name}` -> "hello world"         */
-/* ============================================================ */
 static Value eval_template(Interp *I, Env *env, TemplateNode *t) {
     if (I->has_error) return val_undefined();
     if (!t) return val_string("");
@@ -1002,9 +963,7 @@ static Value eval_template(Interp *I, Env *env, TemplateNode *t) {
     return val_string_take(buf);
 }
 
-/* ============================================================ */
 /* Switch                                                       */
-/* ============================================================ */
 static Value eval_switch(Interp *I, Env *env, SwitchStmt *sw) {
     if (I->has_error) return val_undefined();
     Value disc = eval_expr(I, env, sw->test);
@@ -1040,9 +999,7 @@ static Value eval_switch(Interp *I, Env *env, SwitchStmt *sw) {
     return last;
 }
 
-/* ============================================================ */
 /* Throw                                                        */
-/* ============================================================ */
 static Value eval_throw(Interp *I, Env *env, ThrowStmt *th) {
     if (I->has_error) return val_undefined();
     Value v = val_undefined();
@@ -1055,9 +1012,7 @@ static Value eval_throw(Interp *I, Env *env, ThrowStmt *th) {
     return v;
 }
 
-/* ============================================================ */
 /* Try / Catch / Finally                                        */
-/* ============================================================ */
 static Value eval_try(Interp *I, Env *env, TryStmt *tr) {
     if (I->has_error) return val_undefined();
     Value last = val_undefined();
@@ -1108,9 +1063,7 @@ static Value eval_try(Interp *I, Env *env, TryStmt *tr) {
     return last;
 }
 
-/* ============================================================ */
 /* Call a function                                              */
-/* ============================================================ */
 static Value call_function(Interp *I, Value fn, Value this_val, Value *args, int argc, Node *where) {
     if (I->has_error) return val_undefined();
     if (fn.kind != VAL_FUNCTION) {
@@ -1227,9 +1180,7 @@ static Value call_function(Interp *I, Value fn, Value this_val, Value *args, int
     return result;
 }
 
-/* ============================================================ */
 /* Return                                                       */
-/* ============================================================ */
 static Value eval_return(Interp *I, Env *env, ReturnStmt *r) {
     if (I->has_error) return val_undefined();
     Value v = val_undefined();
@@ -1242,9 +1193,7 @@ static Value eval_return(Interp *I, Env *env, ReturnStmt *r) {
     return v;
 }
 
-/* ============================================================ */
 /* Loops                                                        */
-/* ============================================================ */
 static Value eval_while(Interp *I, Env *env, WhileStmt *w) {
     if (I->has_error) return val_undefined();
     Value last = val_undefined();
@@ -1420,9 +1369,7 @@ static Value eval_assign(Interp *I, Env *env, AssignExpr *a) {
     return flywheel_err(I, "assignment target is not an identifier (yet)", (Node *)a);
 }
 
-/* ============================================================ */
 /* Variable declaration                                         */
-/* ============================================================ */
 static Value eval_var_decl(Interp *I, Env *env, VarDecl *v) {
     if (I->has_error) return val_undefined();
     if (!v) return flywheel_err(I, "eval_var_decl: null node", NULL);
@@ -1454,9 +1401,7 @@ static Value eval_var_decl(Interp *I, Env *env, VarDecl *v) {
     return val_undefined();
 }
 
-/* ============================================================ */
 /* Block — new child env                                        */
-/* ============================================================ */
 static Value eval_block(Interp *I, Env *env, Block *b) {
     if (I->has_error) return val_undefined();
     if (!b) return val_undefined();
@@ -1477,9 +1422,7 @@ static Value eval_block(Interp *I, Env *env, Block *b) {
     return last;
 }
 
-/* ============================================================ */
 /* Statement dispatcher                                         */
-/* ============================================================ */
 static Value eval_statement(Interp *I, Env *env, Node *n) {
     if (!g_cat_enabled) return eval_statement_impl(I, env, n);
     if (!n) return val_undefined();
@@ -1570,9 +1513,7 @@ static Value eval_program(Interp *I, Env *env, Program *p) {
     return last;
 }
 
-/* ============================================================ */
 /* Public entry point                                           */
-/* ============================================================ */
 FlyResult flywheel_eval(Interp *I, const char *source, const char *filename) {
     FlyResult result;
     memset(&result, 0, sizeof(result));

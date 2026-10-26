@@ -12,9 +12,7 @@
  * `struct Interp *` without pulling interp.h into every consumer. */
 struct Interp;
 
-/* ============================================================
- * DOM mutation
- * ============================================================ */
+/* DOM mutation */
 
 html_node_t *dom_create_element(html_document_t *doc, const char *tag);
 html_node_t *dom_create_text(html_document_t *doc, const char *text);
@@ -33,9 +31,7 @@ void dom_set_text(html_document_t *doc, html_node_t *node, const char *text);
 void dom_set_id(html_document_t *doc, html_node_t *node, const char *id);
 const char *dom_get_id(const html_node_t *node);
 
-/* ============================================================
- * DOM query
- * ============================================================ */
+/* DOM query */
 
 html_node_t *dom_get_element_by_id(html_node_t *root, const char *id);
 html_node_t *dom_get_element_by_tag(html_node_t *root, const char *tag);
@@ -52,9 +48,7 @@ int dom_query_selector_all(html_node_t *root, const char *selector,
 int dom_matches(html_node_t *node, const char *selector);
 int dom_match_parsed(html_node_t *node, const css_selector_t *sel);
 
-/* ============================================================
- * JS bridge
- * ============================================================ */
+/* JS bridge */
 
 void dom_js_install(struct Interp *I, html_document_t *doc);
 void dom_js_set_stylesheet(struct Interp *I, const css_stylesheet_t *ss);

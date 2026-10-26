@@ -85,9 +85,7 @@ size_t html_arena_bytes(html_arena_t *a) {
     return a ? a->total_bytes : 0;
 }
 
-/* ============================================================
- * Arena pooling — reuse blocks across parses.
- * ============================================================ */
+/* Arena pooling — reuse blocks across parses. */
 
 void html_arena_reset(html_arena_t *a) {
     if (!a) return;

@@ -39,9 +39,7 @@ extern char g_crisptls_last_fail_step[80];
 #define CT_CCS       20
 #define CT_APP       23
 
-/* =========================================================
- * Cipher dispatch
- * ========================================================= */
+/* Cipher dispatch */
 
 /* Returns 0 on success and fills aead + key_len. */
 static int session_cipher_to_aead(uint16_t suite, int *aead, size_t *key_len) {
@@ -171,9 +169,7 @@ static void session_log_alert(const uint8_t *pt, size_t len, const char *when) {
     (void)level;
 }
 
-/* =========================================================
- * fd I/O with timeout
- * ========================================================= */
+/* fd I/O with timeout */
 
 static int wait_fd(int fd, short ev, uint32_t timeout_ms) {
     struct pollfd pfd;
@@ -222,18 +218,7 @@ int session_fd_read_some(int fd, uint8_t *buf, size_t cap, size_t *out_len,
     }
 }
 
-/* =========================================================
- * transcript — accumulate all handshake messages, hash at end
- * =========================================================
- * We keep a rolling SHA-256 context in session.c. But the session
- * struct doesn't hold one (would need OpenSSL types in header).
- * Simple approach: accumulate into a growing buffer stored on the
- * stack of the handshake function. For now, we compute the hash
- * fresh by keeping the full transcript in a static buffer.
- *
- * To keep the struct clean and still work, we hold transcript bytes
- * in a separate malloc'd buffer tracked via a side table.
- * ========================================================= */
+/* transcript — accumulate all handshake messages, hash at end ========================================================= We keep a rolling SHA-256 context in session.c. But the session struct doesn't hold one (would need OpenSSL types in header). Simple approach: accumulate into a growing buffer stored on the stack of the handshake function. For now, we compute the hash fresh by keeping the full transcript in a static buffer. To keep the struct clean and still work, we hold transcript bytes in a separate malloc'd buffer tracked via a side table. */
 
 /* We'll accumulate transcript in a stack-allocated buffer passed around
  * by the handshake function. The static API in session.h just hashes
@@ -253,9 +238,7 @@ int session_transcript_update(struct crisptls_conn *s,
     return 0;   /* handled in handshake loop */
 }
 
-/* =========================================================
- * Alerts
- * ========================================================= */
+/* Alerts */
 
 int session_send_alert(struct crisptls_conn *s, uint8_t level, uint8_t desc) {
     uint8_t body[2] = { level, desc };
@@ -339,9 +322,7 @@ static int record_send_encrypted(struct crisptls_conn *s, uint8_t inner_ct,
     return 0;
 }
 
-/* =========================================================
- * Handshake orchestration
- * ========================================================= */
+/* Handshake orchestration */
 
 /* Fixed transcript buffer for the client flight */
 #define TRANSCRIPT_CAP 65536
@@ -457,13 +438,8 @@ static int read_record(struct crisptls_conn *s, tls_record_t *rec,
  * inline in session_handshake(), with CertVerify/EE/Cert/Finished
  * dispatch and transcript ordering handled together. */
 
-/* =========================================================
- * Handshake: main driver
- * ========================================================= */
-/* =========================================================
- * TLS 1.2 handshake — helpers and main driver
- * ECDHE + AEAD only in this pass.
- * ========================================================= */
+/* Handshake: main driver */
+/* TLS 1.2 handshake — helpers and main driver ECDHE + AEAD only in this pass. */
 
 static int read_handshake_plain(struct crisptls_conn *s, uint8_t *out, size_t cap,
                                 size_t *out_len)
@@ -1256,9 +1232,7 @@ done:
     return rc;
 }
 
-/* =========================================================
- * Lifecycle
- * ========================================================= */
+/* Lifecycle */
 
 struct crisptls_conn *session_new(const crisptls_policy_t *policy, int fd,
                                    const char *sni_host) {
@@ -1288,9 +1262,7 @@ void session_free(struct crisptls_conn *s) {
     free(s);
 }
 
-/* =========================================================
- * Application data I/O
- * ========================================================= */
+/* Application data I/O */
 
 ssize_t session_write_app(struct crisptls_conn *s, const void *buf, size_t n) {
     TRACE_ENTER("crisptls: write app data", "want=%zu", n);
@@ -1302,9 +1274,7 @@ ssize_t session_write_app(struct crisptls_conn *s, const void *buf, size_t n) {
     return (ssize_t)n;
 }
 
-/* =========================================================
- * KeyUpdate (RFC 8446 §4.6.3)
- * ========================================================= */
+/* KeyUpdate (RFC 8446 §4.6.3) */
 
 /** Send a KeyUpdate message; then install new tx keys. */
 static int session_send_key_update(struct crisptls_conn *s, uint8_t request) {

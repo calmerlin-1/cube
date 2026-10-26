@@ -84,9 +84,7 @@ int tls_record_decrypt_13_chacha20(const uint8_t key[32],
 }
 
 
-/* =========================================================
- * TLS 1.2 AEAD decryption — reverse of encrypt_12 above.
- * ========================================================= */
+/* TLS 1.2 AEAD decryption — reverse of encrypt_12 above. */
 
 int tls_record_decrypt_12_aes128gcm(const uint8_t key[16],
                                      const uint8_t fixed_iv[4],

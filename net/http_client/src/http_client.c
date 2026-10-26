@@ -30,9 +30,7 @@
 #include <sys/time.h>
 #include <unistd.h>
 
-/* ============================================================
- * Headers
- * ============================================================ */
+/* Headers */
 
 void http_headers_init(http_headers_t *h) {
     h->items = NULL;
@@ -107,9 +105,7 @@ const char *http_headers_get(const http_headers_t *h, const char *name) {
     return NULL;
 }
 
-/* ============================================================
- * Response
- * ============================================================ */
+/* Response */
 
 void http_response_free(http_response_t *r) {
     if (!r) return;
@@ -119,9 +115,7 @@ void http_response_free(http_response_t *r) {
     memset(r, 0, sizeof(*r));
 }
 
-/* ============================================================
- * Client
- * ============================================================ */
+/* Client */
 
 void http_client_init(http_client_t *c) {
     if (!c) return;
@@ -165,9 +159,7 @@ static int buf_append_str(buf_t *b, const char *s) {
     return buf_append(b, s, strlen(s));
 }
 
-/* =========================================================
- * http_io_t — raw-fd implementation
- * ========================================================= */
+/* http_io_t — raw-fd implementation */
 
 /* Buffered read on top of a raw fd.
  * The protocol layer calls read() one byte at a time for header
@@ -405,13 +397,9 @@ static int read_chunked_body_io(const http_io_t *io, buf_t *out) {
     }
 }
 
-/* ============================================================
- * Core: send over an existing fd
- * ============================================================ */
+/* Core: send over an existing fd */
 
-/* =========================================================
- * http_client_send_io — core protocol logic (io-agnostic)
- * ========================================================= */
+/* http_client_send_io — core protocol logic (io-agnostic) */
 
 int http_client_send_io(const http_io_t       *io,
                         const char            *host,
@@ -638,13 +626,9 @@ int http_client_send_fd(int                    fd,
 }
 
 
-/* ============================================================
- * Open / close wrapper
- * ============================================================ */
+/* Open / close wrapper */
 
-/* =========================================================
- * http_client_do — plain HTTP over TCP, with cookies + keep-alive
- * ========================================================= */
+/* http_client_do — plain HTTP over TCP, with cookies + keep-alive */
 
 int http_client_do(http_client_t        *c,
                    const char           *host,
@@ -811,9 +795,7 @@ int http_client_do_follow(http_client_t        *c,
     return rc;
 }
 
-/* ============================================================
- * Convenience
- * ============================================================ */
+/* Convenience */
 
 int http_client_get(http_client_t *c, const char *host, uint16_t port,
                     const char *path, http_response_t *out)
@@ -876,11 +858,7 @@ int http_send_io(const http_io_t       *io,
 }
 
 
-/* ============================================================
- * Runtime trace switch for the HTTP/2 layer.
- * Off by default. Enabled by cube's --debug flag, or by
- * calling http_client_set_trace(1) directly.
- * ============================================================ */
+/* Runtime trace switch for the HTTP/2 layer. Off by default. Enabled by cube's --debug flag, or by calling http_client_set_trace(1) directly. */
 int g_h2_trace = 0;
 
 void http_client_set_trace(int on) {

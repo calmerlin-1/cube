@@ -271,12 +271,7 @@ void dns_cache_stats(dns_cache_t *c, dns_cache_stats_t *out) {
     out->expired = c->expired;
 }
 
-/* ============================================================
- * Persistence: save/load A and AAAA entries as text.
- * Format per line:
- *   name type cls ttl_seconds records_count ip1 ip2 ...
- * Negative entries and non-address types are not persisted.
- * ============================================================ */
+/* Persistence: save/load A and AAAA entries as text. Format per line: name type cls ttl_seconds records_count ip1 ip2 ... Negative entries and non-address types are not persisted. */
 
 int dns_cache_save(dns_cache_t *c, const char *path) {
     if (!c || !path) return -1;

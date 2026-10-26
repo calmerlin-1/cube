@@ -40,9 +40,7 @@ static int g_cache_enabled = 0;
 
 void css_cache_enable(int enable) { g_cache_enabled = enable ? 1 : 0; }
 
-/* ============================================================
- * Token cache
- * ============================================================ */
+/* Token cache */
 
 static css_tok_cache_entry_t *tok_find(uint64_t h, size_t len) {
     for (int i = 0; i < TOK_CACHE_SIZE; i++) {
@@ -92,9 +90,7 @@ void css_tok_cache_put(const char *src, size_t len,
     e->n_tokens = n;
 }
 
-/* ============================================================
- * Stylesheet cache
- * ============================================================ */
+/* Stylesheet cache */
 
 static css_sheet_cache_entry_t *sheet_find(uint64_t h, size_t len) {
     for (int i = 0; i < SHEET_CACHE_SIZE; i++) {
@@ -133,9 +129,7 @@ const css_stylesheet_t *css_parse_cached(const char *src, size_t len) {
     return ss;
 }
 
-/* ============================================================
- * Selector intern
- * ============================================================ */
+/* Selector intern */
 
 static uint32_t intern_hash(const char *s, int n) {
     uint32_t h = 2166136261u;
@@ -181,9 +175,7 @@ void css_selector_intern_put(const char *text, int len,
     }
 }
 
-/* ============================================================
- * Stats & clear
- * ============================================================ */
+/* Stats & clear */
 
 void css_cache_stats(css_cache_stats_t *out) {
     if (!out) return;

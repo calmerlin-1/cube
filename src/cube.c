@@ -46,9 +46,7 @@
 #include <fcntl.h>
 #include <sys/time.h>
 
-/* ============================================================
- * CLI options
- * ============================================================ */
+/* CLI options */
 typedef struct {
     const char *url;
     const char *output;      /* NULL = stdout */
@@ -135,9 +133,7 @@ static void usage(const char *argv0) {
 "\n", argv0);
 }
 
-/* ============================================================
- * TLS wrappers for http_io_t
- * ============================================================ */
+/* TLS wrappers for http_io_t */
 static const char *tls_ver_str(int v) {
     static char buf[12];
     switch (v) {
@@ -163,9 +159,7 @@ static ssize_t tls_write_fn(void *ctx, const void *buf, size_t n) {
 }
 
 
-/* ============================================================
- * DNS resolution
- * ============================================================ */
+/* DNS resolution */
 /* Validate a hostname per RFC 1034/1123 before DNS resolution:
  *  - total 1..253 bytes
  *  - each label 1..63 bytes
@@ -279,9 +273,7 @@ static int resolve_host_all(const char *host, int fam_pref,
     return 0;
 }
 
-/* ============================================================
- * Output helpers
- * ============================================================ */
+/* Output helpers */
 static const char *http_version_str(http_version_t v) {
     switch (v) {
         case HTTP_09: return "HTTP/0.9";
@@ -572,9 +564,7 @@ static int write_body(const http_response_t *r, const char *path,
     return 0;
 }
 
-/* ============================================================
- * Main
- * ============================================================ */
+/* Main */
 static int parse_args(int argc, char **argv, cube_opts_t *o,
                      const char **extra_headers, int *n_extra) {
     for (int i = 1; i < argc; i++) {

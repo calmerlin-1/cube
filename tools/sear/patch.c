@@ -234,11 +234,7 @@ int sear_mode_patch(const sear_file_t *f, const sear_opts_t *o) {
     return 2;
 }
 
-/* ============================================================
- * --subst /pattern/: replace every line matching the pattern
- * with the stdin content. Multi-line stdin is written verbatim;
- * the matched line's terminating newline is preserved.
- * ============================================================ */
+/* --subst /pattern/: replace every line matching the pattern with the stdin content. Multi-line stdin is written verbatim; the matched line's terminating newline is preserved. */
 
 int sear_mode_subst(const sear_file_t *f, const sear_opts_t *o) {
     if (!o->pattern) { sear_err("--subst requires a pattern"); return 2; }

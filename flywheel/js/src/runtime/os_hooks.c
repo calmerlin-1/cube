@@ -192,7 +192,7 @@ void os_print_banner(void) {
     printf("=====================================\n");
 }
 
-/* ============ filesystem writability ============ */
+/* filesystem writability */
 
 /** Probe by trying to create a file. Never crashes. */
 int os_writable_dir(const char *path) {

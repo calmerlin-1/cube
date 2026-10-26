@@ -11,9 +11,7 @@
 #include <string.h>
 #include <ctype.h>
 
-/* ================================================================== */
 /* Keyword table — data, not code. Add one line to add a keyword.     */
-/* ================================================================== */
 typedef struct { const char *word; KeywordKind kw; } KwEntry;
 
 static const KwEntry KEYWORDS[] = {
@@ -50,9 +48,7 @@ KeywordKind keyword_lookup(const char *word, int length) {
     return KW_NONE;
 }
 
-/* ================================================================== */
 /* Character classification                                           */
-/* ================================================================== */
 static int is_ident_start(unsigned char c) {
     return (c >= 'a' && c <= 'z') ||
            (c >= 'A' && c <= 'Z') ||
@@ -71,9 +67,7 @@ static int is_hex(unsigned char c)   {
 static int is_oct(unsigned char c)   { return c >= '0' && c <= '7'; }
 static int is_bin(unsigned char c)   { return c == '0' || c == '1'; }
 
-/* ================================================================== */
 /* Lexer core                                                         */
-/* ================================================================== */
 void lexer_init(Lexer *lx, const char *source) {
     lx->source      = source;
     lx->current     = source;
@@ -119,9 +113,7 @@ static unsigned char advance(Lexer *lx) {
     return c;
 }
 
-/* ================================================================== */
 /* Whitespace + comments (with line terminator tracking for ASI)      */
-/* ================================================================== */
 static int skip_whitespace(Lexer *lx, int *saw_newline) {
     *saw_newline = 0;
     const char *p = lx->current;
@@ -175,9 +167,7 @@ static int skip_whitespace(Lexer *lx, int *saw_newline) {
     return 0;
 }
 
-/* ================================================================== */
 /* Number scanning (all forms)                                        */
-/* ================================================================== */
 static Token scan_number(Lexer *lx) {
     Token t = {0};
     t.start  = lx->current;
@@ -248,9 +238,7 @@ static Token scan_number(Lexer *lx) {
     return t;
 }
 
-/* ================================================================== */
 /* Identifier / keyword scanning                                      */
-/* ================================================================== */
 static Token scan_ident(Lexer *lx) {
     Token t = {0};
     t.start  = lx->current;
@@ -288,9 +276,7 @@ static Token scan_ident(Lexer *lx) {
     return t;
 }
 
-/* ================================================================== */
 /* String scanning (single, double, template)                         */
-/* ================================================================== */
 static Token scan_simple_string(Lexer *lx, char quote) {
     Token t = {0};
     t.start  = lx->current;
@@ -374,9 +360,7 @@ static Token scan_template(Lexer *lx, int is_continuation) {
     return t;
 }
 
-/* ================================================================== */
 /* Regex scanning (called only when lexer decides it's a regex)       */
-/* ================================================================== */
 static Token scan_regex(Lexer *lx) {
     Token t = {0};
     t.start  = lx->current;
@@ -406,9 +390,7 @@ static Token scan_regex(Lexer *lx) {
     return t;
 }
 
-/* ================================================================== */
 /* Operator / punctuation dispatch (longest match wins)               */
-/* ================================================================== */
 static Token make_tok(Lexer *lx, TokKind k) {
     Token t = {0};
     t.kind   = k;
@@ -508,9 +490,7 @@ static Token scan_punct(Lexer *lx) {
     #undef MK
 }
 
-/* ================================================================== */
 /* Main dispatch                                                      */
-/* ================================================================== */
 static int prev_is_value(TokKind k) {
     switch (k) {
         case TOK_IDENT:
@@ -615,9 +595,7 @@ Token *lexer_all(Lexer *lx, int *out_count) {
     return arr;
 }
 
-/* ================================================================== */
 /* Names for tests                                                    */
-/* ================================================================== */
 const char *token_kind_name(TokKind k) {
     switch (k) {
         case TOK_EOF: return "EOF";
@@ -693,9 +671,7 @@ const char *token_kind_name(TokKind k) {
     return "?";
 }
 
-/* ================================================================== */
 /* Standalone test                                                    */
-/* ================================================================== */
 #ifdef LEXER_TEST
 static void print_token(const Token *t) {
     printf("%-16s line=%d col=%-3d len=%-3d text=\"%.*s\"",

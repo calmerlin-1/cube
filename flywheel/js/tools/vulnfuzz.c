@@ -17,9 +17,7 @@
 #include <sys/resource.h>
 #include "../include/interp.h"
 
-/* ============================================================ */
 /* Crash trap                                                   */
-/* ============================================================ */
 static jmp_buf g_jmp;
 static volatile const char *g_cur = "(idle)";
 static volatile int g_crashed = 0;
@@ -31,18 +29,14 @@ static void trap(int sig) {
     longjmp(g_jmp, 1);
 }
 
-/* ============================================================ */
 /* Timing                                                       */
-/* ============================================================ */
 static double now_us(void) {
     struct timespec t;
     clock_gettime(CLOCK_MONOTONIC, &t);
     return t.tv_sec * 1e6 + t.tv_nsec / 1e3;
 }
 
-/* ============================================================ */
 /* Stats                                                        */
-/* ============================================================ */
 typedef struct {
     const char *name;
     int total;
@@ -138,9 +132,7 @@ static void run_input(Phase *p, const char *label, const char *src) {
     }
 }
 
-/* ============================================================ */
 /* Phase 1 — real JS programs, timed one by one                 */
-/* ============================================================ */
 static void phase_real_programs(void) {
     Phase p;
     phase_start(&p, "Phase 1: real JS programs");
@@ -180,9 +172,7 @@ static void phase_real_programs(void) {
     phase_end(&p);
 }
 
-/* ============================================================ */
 /* Phase 2 — structured token fuzz                              */
-/* ============================================================ */
 static void phase_token_fuzz(int N) {
     Phase p;
     phase_start(&p, "Phase 2: structured token fuzz");
@@ -223,9 +213,7 @@ static void phase_token_fuzz(int N) {
     phase_end(&p);
 }
 
-/* ============================================================ */
 /* Phase 3 — byte fuzz (raw random bytes, no printable guarantee) */
-/* ============================================================ */
 static void phase_byte_fuzz(int N, int max_len) {
     Phase p;
     phase_start(&p, "Phase 3: byte fuzz");
@@ -251,9 +239,7 @@ static void phase_byte_fuzz(int N, int max_len) {
     phase_end(&p);
 }
 
-/* ============================================================ */
 /* Phase 4 — adversarial structured patterns                    */
-/* ============================================================ */
 static void phase_adversarial(void) {
     Phase p;
     phase_start(&p, "Phase 4: adversarial patterns");
@@ -349,9 +335,7 @@ static void phase_adversarial(void) {
     phase_end(&p);
 }
 
-/* ============================================================ */
 /* Phase 5 — long-running programs, timed                       */
-/* ============================================================ */
 static void phase_perf(void) {
     Phase p;
     phase_start(&p, "Phase 5: performance probes");
@@ -413,9 +397,7 @@ static void phase_perf(void) {
     phase_end(&p);
 }
 
-/* ============================================================ */
 /* Main                                                         */
-/* ============================================================ */
 int main(void) {
     srand((unsigned)time(NULL));
 

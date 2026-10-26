@@ -24,10 +24,7 @@
 #include <stdio.h>
 #include <string.h>
 
-/* ============================================================
- * Field element: uint64_t[4], little-endian.
- * p = 2^256 - 2^224 + 2^192 + 2^96 - 1
- * ============================================================ */
+/* Field element: uint64_t[4], little-endian. p = 2^256 - 2^224 + 2^192 + 2^96 - 1 */
 
 /* Prime p in u64[4] little-endian. */
 static const uint64_t P64[4] = {
@@ -278,9 +275,7 @@ static void fe64_inv(uint64_t r[4], const uint64_t a[4]) {
     fe64_copy(r, x);
 }
 
-/* ============================================================
- * Serialization: 4×uint64 limbs ↔ 32-byte big-endian.
- * ============================================================ */
+/* Serialization: 4×uint64 limbs ↔ 32-byte big-endian. */
 
 /* out[0..31] = a, big-endian. */
 static void fe64_to_bytes(uint8_t out[32], const uint64_t a[4]) {
@@ -314,12 +309,7 @@ static int fe64_is_zero(const uint64_t a[4]) {
     return acc == 0;
 }
 
-/* ============================================================
- * Point ops — Jacobian coordinates (X : Y : Z).
- *   Affine (x, y) corresponds to (X = x·Z², Y = y·Z³, Z).
- *   Point at infinity: Z = 0.
- *   Curve: y² = x³ - 3x + b.
- * ============================================================ */
+/* Point ops — Jacobian coordinates (X : Y : Z). Affine (x, y) corresponds to (X = x·Z², Y = y·Z³, Z). Point at infinity: Z = 0. Curve: y² = x³ - 3x + b. */
 
 /* Set point to infinity (Z = 0, X = Y = 1 for internal consistency). */
 static void ge64_set_infinity(ge64_t *p) {
@@ -506,9 +496,7 @@ static void ge64_from_affine(ge64_t *r, const uint64_t x[4], const uint64_t y[4]
     fe64_one(r->Z);
 }
 
-/* ============================================================
- * Public API.
- * ============================================================ */
+/* Public API. */
 
 /* Generate a keypair. priv = 32-byte big-endian scalar, pub = 65-byte
  * uncompressed point (0x04 || X || Y). */
@@ -583,11 +571,7 @@ int ct_p256_ecdh(uint8_t shared[32],
     return 0;
 }
 
-/* ============================================================
- * Selftest — compiled only with -DP256_SELFTEST.
- * Not part of the library. Prints intermediate values so we can
- * bisect field/point math failures.
- * ============================================================ */
+/* Selftest — compiled only with -DP256_SELFTEST. Not part of the library. Prints intermediate values so we can bisect field/point math failures. */
 #ifdef P256_SELFTEST
 #include <stdio.h>
 
@@ -736,20 +720,7 @@ void p256_selftest(void) {
 }
 #endif
 
-/* ============================================================
- * Montgomery multiplication for P-256.
- * Element a in Montgomery form represents a·R mod p where R = 2^256.
- * mont_mul computes a·b·R⁻¹ mod p (REDC), so mont_mul(A_mont, B_mont) = (A·B)_mont.
- * fe64_mul / fe64_sqr are wrappers that assume inputs are already in Mont form.
- *
- * REDC: for t = a·b (< R·p), m = (t mod R) · p⁻¹ mod R, result = (t + m·p) / R.
- * Since p⁻¹ mod 2^64 = 0x00000000_00000001_00000000_FFFFFFFF... wait, that's
- * the standard NIST P-256 REDC constant. Correct value is p⁻¹ mod 2^64 = 1.
- * Verify: p[0] = 0xFFFFFFFFFFFFFFFF. (-p⁻¹) mod 2^64 = p[0]⁻¹ mod 2^64.
- * 0xFFFFFFFFFFFFFFFF ≡ -1 mod 2^64, so p[0]⁻¹ = -1 = 0xFFFFFFFFFFFFFFFF.
- * So m_i = t_i * (-p⁻¹) ... we use m = t · NEG_P_INV mod 2^64 where
- * NEG_P_INV = -p⁻¹ mod 2^64 = 1 (since p⁻¹ = -1, negating gives 1).
- * ============================================================ */
+/* Montgomery multiplication for P-256. Element a in Montgomery form represents a·R mod p where R = 2^256. mont_mul computes a·b·R⁻¹ mod p (REDC), so mont_mul(A_mont, B_mont) = (A·B)_mont. fe64_mul / fe64_sqr are wrappers that assume inputs are already in Mont form. REDC: for t = a·b (< R·p), m = (t mod R) · p⁻¹ mod R, result = (t + m·p) / R. Since p⁻¹ mod 2^64 = 0x00000000_00000001_00000000_FFFFFFFF... wait, that's the standard NIST P-256 REDC constant. Correct value is p⁻¹ mod 2^64 = 1. Verify: p[0] = 0xFFFFFFFFFFFFFFFF. (-p⁻¹) mod 2^64 = p[0]⁻¹ mod 2^64. 0xFFFFFFFFFFFFFFFF ≡ -1 mod 2^64, so p[0]⁻¹ = -1 = 0xFFFFFFFFFFFFFFFF. So m_i = t_i * (-p⁻¹) ... we use m = t · NEG_P_INV mod 2^64 where NEG_P_INV = -p⁻¹ mod 2^64 = 1 (since p⁻¹ = -1, negating gives 1). */
 
 /* NEG_P_INV = -p⁻¹ mod 2^64. For p[0] = 0xFFFFFFFFFFFFFFFF (i.e. -1 mod 2^64),
  * p⁻¹ = -1, so NEG_P_INV = 1. */
@@ -935,16 +906,7 @@ void p256_mont_test(void) {
 }
 #endif
 
-/* ============================================================
- * ECDSA-P256-SHA256 verify (RFC 6979 §2.4.1, FIPS 186-4 §6.4).
- *
- * Signature input is DER-encoded ECDSA-Sig-Value:
- *   SEQUENCE { INTEGER r, INTEGER s }
- * Public key input is DER-encoded SubjectPublicKeyInfo (SPKI).
- *
- * All field and point helpers below are static in this file.
- * Exposing ECDSA here avoids exporting 10+ internal symbols.
- * ============================================================ */
+/* ECDSA-P256-SHA256 verify (RFC 6979 §2.4.1, FIPS 186-4 §6.4). Signature input is DER-encoded ECDSA-Sig-Value: SEQUENCE { INTEGER r, INTEGER s } Public key input is DER-encoded SubjectPublicKeyInfo (SPKI). All field and point helpers below are static in this file. Exposing ECDSA here avoids exporting 10+ internal symbols. */
 
 extern int ct_sha256(const uint8_t *data, size_t len, uint8_t out[32]);
 

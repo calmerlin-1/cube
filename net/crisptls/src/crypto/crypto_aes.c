@@ -125,11 +125,7 @@ int ct_aes256_ecb_encrypt_block(const uint8_t key[32],
     return CT_OK;
 }
 
-/* ============================================================
- * AES decryption (FIPS 197 §5.3) — needed for CBC decrypt.
- * Same S-box, but inverse permutations. Round keys are used in
- * reverse order (nr to 0).
- * ============================================================ */
+/* AES decryption (FIPS 197 §5.3) — needed for CBC decrypt. Same S-box, but inverse permutations. Round keys are used in reverse order (nr to 0). */
 
 static const uint8_t INV_SBOX[256] = {
     0x52,0x09,0x6a,0xd5,0x30,0x36,0xa5,0x38,0xbf,0x40,0xa3,0x9e,0x81,0xf3,0xd7,0xfb,
@@ -212,9 +208,7 @@ static void aes256_decrypt_block(const uint8_t key[32], const uint8_t in[16], ui
     aes_decrypt_block(rk, 14, out);
 }
 
-/* ============================================================
- * AES-CBC (NIST SP 800-38A §6.2) — no padding, len must be % 16.
- * ============================================================ */
+/* AES-CBC (NIST SP 800-38A §6.2) — no padding, len must be % 16. */
 
 int ct_aes128_cbc_encrypt(const uint8_t key[16], const uint8_t iv[16],
                           const uint8_t *in, uint8_t *out, size_t len) {

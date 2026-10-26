@@ -98,13 +98,7 @@ int crisptls_policy_from_profile(crisptls_policy_t *p, const char *name) {
     return CRISPTLS_OK;
 }
 
-/* ============================================================
- * Generated policy loader — Session B addition.
- *
- * Reads cache/policy.generated.txt (produced by tools/profile_gen).
- * Falls back silently to crisptls_policy_default on any error.
- * Does not touch crisptls_policy_default or any other existing function.
- * ============================================================ */
+/* Generated policy loader — Session B addition. Reads cache/policy.generated.txt (produced by tools/profile_gen). Falls back silently to crisptls_policy_default on any error. Does not touch crisptls_policy_default or any other existing function. */
 
 /* Pre-declared cipher order tables. Loader maps file strings to these. */
 static const uint16_t GEN_13_AES_FIRST[] = {

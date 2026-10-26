@@ -10,9 +10,7 @@
 #include <stdio.h>
 #include <math.h>
 
-/* ============================================================ */
 /* Constructors                                                  */
-/* ============================================================ */
 Value val_undefined(void) { Value v; v.kind = VAL_UNDEFINED; v.as.number = 0; return v; }
 Value val_null(void)      { Value v; v.kind = VAL_NULL;      v.as.number = 0; return v; }
 Value val_bool(int b)     { Value v; v.kind = VAL_BOOL;      v.as.boolean = b ? 1 : 0; return v; }
@@ -33,9 +31,7 @@ Value val_string_take(char *s) {
     return v;
 }
 
-/* ============================================================ */
 /* Type checks                                                   */
-/* ============================================================ */
 int val_is_undefined(Value v) { return v.kind == VAL_UNDEFINED; }
 int val_is_null(Value v)      { return v.kind == VAL_NULL; }
 int val_is_nullish(Value v)   { return v.kind == VAL_UNDEFINED || v.kind == VAL_NULL; }
@@ -58,9 +54,7 @@ int val_is_truthy(Value v) {
     return 0;
 }
 
-/* ============================================================ */
 /* Coercion                                                      */
-/* ============================================================ */
 double val_to_number(Value v) {
     switch (v.kind) {
     case VAL_UNDEFINED: return NAN;
@@ -113,9 +107,7 @@ Value val_to_string(Value v) {
     }
 }
 
-/* ============================================================ */
 /* Equality                                                      */
-/* ============================================================ */
 int val_strict_equals(Value a, Value b) {
     if (a.kind != b.kind) return 0;
     switch (a.kind) {
@@ -149,9 +141,7 @@ int val_loose_equals(Value a, Value b) {
     return 0;
 }
 
-/* ============================================================ */
 /* Debug                                                         */
-/* ============================================================ */
 void val_print(Value v) {
     switch (v.kind) {
     case VAL_STRING: printf("%s", v.as.string ? v.as.string : ""); break;

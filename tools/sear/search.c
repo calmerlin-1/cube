@@ -92,10 +92,7 @@ int sear_mode_search(const sear_file_t *f, const sear_opts_t *o) {
 }
 
 
-/* ============================================================
- * Multi-file search: iterate over o->files, one sear_mode_search
- * per file, then a combined summary at the end.
- * ============================================================ */
+/* Multi-file search: iterate over o->files, one sear_mode_search per file, then a combined summary at the end. */
 
 typedef struct {
     sear_pattern_t *pat;

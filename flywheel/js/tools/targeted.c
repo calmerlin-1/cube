@@ -32,9 +32,7 @@ static jmp_buf jmp;
 static volatile int sig = 0;
 static void trap(int s) { sig = s; longjmp(jmp, 1); }
 
-/* ============================================================
- * TARGET 1 — Memory leak: 100 fresh Interp cycles
- * ============================================================ */
+/* TARGET 1 — Memory leak: 100 fresh Interp cycles */
 static void target_memory(void) {
     printf("\n========================================\n");
     printf(" TARGET 1: Memory leak per Interp\n");
@@ -79,9 +77,7 @@ static void target_memory(void) {
         printf("    [PASS] memory stable across cycles\n");
 }
 
-/* ============================================================
- * TARGET 2 — Array push quadratic scaling
- * ============================================================ */
+/* TARGET 2 — Array push quadratic scaling */
 static void target_push(void) {
     printf("\n========================================\n");
     printf(" TARGET 2: Array push scaling\n");
@@ -186,9 +182,7 @@ static void target_push(void) {
     }
 }
 
-/* ============================================================
- * TARGET 3 — undefined identifier: PARSE vs RUNTIME
- * ============================================================ */
+/* TARGET 3 — undefined identifier: PARSE vs RUNTIME */
 static void target_undefined(void) {
     printf("\n========================================\n");
     printf(" TARGET 3: undefined identifier status\n");
@@ -224,9 +218,7 @@ static void target_undefined(void) {
     }
 }
 
-/* ============================================================
- * TARGET 4 — Interp setup vs eval cost breakdown
- * ============================================================ */
+/* TARGET 4 — Interp setup vs eval cost breakdown */
 static void target_setup_cost(void) {
     printf("\n========================================\n");
     printf(" TARGET 4: Where does per-eval time go?\n");

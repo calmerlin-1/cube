@@ -38,9 +38,7 @@ static jmp_buf g_jmp;
 static volatile int g_sig = 0;
 static void trap(int s) { g_sig = s; longjmp(g_jmp, 1); }
 
-/* ============================================================ */
 /* Category 1: LEXER only                                       */
-/* ============================================================ */
 static void cat_lexer(void) {
     printf("\n========================================\n");
     printf(" CATEGORY 1: LEXER\n");
@@ -96,9 +94,7 @@ static void cat_lexer(void) {
     }
 }
 
-/* ============================================================ */
 /* Category 2: PARSER only                                      */
-/* ============================================================ */
 static void cat_parser(void) {
     printf("\n========================================\n");
     printf(" CATEGORY 2: PARSER\n");
@@ -154,9 +150,7 @@ static void cat_parser(void) {
     }
 }
 
-/* ============================================================ */
 /* Category 3: INTERPRETER — behavior                          */
-/* ============================================================ */
 static void cat_interp(void) {
     printf("\n========================================\n");
     printf(" CATEGORY 3: INTERPRETER BEHAVIOR\n");
@@ -225,9 +219,7 @@ static void cat_interp(void) {
     printf("  -----\n  pass=%d fail=%d\n", pass, fail);
 }
 
-/* ============================================================ */
 /* Category 4: MEMORY leak check across many evals              */
-/* ============================================================ */
 static void cat_memory(void) {
     printf("\n========================================\n");
     printf(" CATEGORY 4: MEMORY FOOTPRINT\n");
@@ -260,9 +252,7 @@ static void cat_memory(void) {
         printf("    [OK] memory stable\n");
 }
 
-/* ============================================================ */
 /* Category 5: STRESS on scaling                                */
-/* ============================================================ */
 static void cat_scale(void) {
     printf("\n========================================\n");
     printf(" CATEGORY 5: SCALING\n");
@@ -305,9 +295,7 @@ static void cat_scale(void) {
     }
 }
 
-/* ============================================================ */
 /* Category 6: EDGE CASES                                       */
-/* ============================================================ */
 static void cat_edge(void) {
     printf("\n========================================\n");
     printf(" CATEGORY 6: EDGE CASES\n");

@@ -95,10 +95,7 @@ int erdict_mode_search(const erdict_file_t *f, const erdict_opts_t *o) {
 }
 
 
-/* ============================================================
- * Multi-file search: iterate over o->files, one run_one_file
- * per file, then a combined summary at the end.
- * ============================================================ */
+/* Multi-file search: iterate over o->files, one run_one_file per file, then a combined summary at the end. */
 
 typedef struct {
     erdict_pattern_t *pat;

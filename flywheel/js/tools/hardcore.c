@@ -7,10 +7,7 @@
 #include <unistd.h>
 #include "../include/interp.h"
 
-/* ============================================================
- * Crash trap — if the engine segfaults, we catch it, print,
- * and jump back to the loop so we can continue with the next test.
- * ============================================================ */
+/* Crash trap — if the engine segfaults, we catch it, print, and jump back to the loop so we can continue with the next test. */
 static jmp_buf g_crash_jmp;
 static volatile const char *g_current = NULL;
 static volatile int g_crashed = 0;
@@ -26,18 +23,14 @@ static void crash_handler(int sig) {
     longjmp(g_crash_jmp, 1);
 }
 
-/* ============================================================
- * Timing helper
- * ============================================================ */
+/* Timing helper */
 static double now_us(void) {
     struct timespec t;
     clock_gettime(CLOCK_MONOTONIC, &t);
     return t.tv_sec * 1e6 + t.tv_nsec / 1e3;
 }
 
-/* ============================================================
- * Test runner — catches crashes, times, records status
- * ============================================================ */
+/* Test runner — catches crashes, times, records status */
 typedef struct {
     const char *label;
     const char *src;
@@ -80,9 +73,7 @@ static void run_one(const char *label, const char *src) {
     }
 }
 
-/* ============================================================
- * Real JS corpus — programs that real-world code contains
- * ============================================================ */
+/* Real JS corpus — programs that real-world code contains */
 static const char *REAL_JS[] = {
     /* --- 1. classic algorithms --- */
     "function fib(n) { if (n < 2) return n; return fib(n-1) + fib(n-2); } fib(15)",
@@ -143,9 +134,7 @@ static const char *REAL_JS[] = {
     "let result = ''; for (let i = 1; i <= 5; i = i + 1) result = result + `${i},`; result",
 };
 
-/* ============================================================
- * C-level fuzz — random bytes (includes nulls and 0x80+ bytes)
- * ============================================================ */
+/* C-level fuzz — random bytes (includes nulls and 0x80+ bytes) */
 static void fuzz_bytes(int N, int max_len) {
     unsigned char *buf = malloc(max_len + 1);
     if (!buf) return;
@@ -173,9 +162,7 @@ static void fuzz_bytes(int N, int max_len) {
     free(buf);
 }
 
-/* ============================================================
- * Structured fuzz — random JS-ish tokens
- * ============================================================ */
+/* Structured fuzz — random JS-ish tokens */
 static const char *TOKENS[] = {
     "function","if","else","for","while","return","let","var","const",
     "class","new","typeof","delete","in","instanceof",
@@ -226,9 +213,7 @@ static void fuzz_tokens(int N) {
     }
 }
 
-/* ============================================================
- * Instruction trace — for one specific program, print every step
- * ============================================================ */
+/* Instruction trace — for one specific program, print every step */
 static void trace_program(const char *src) {
     printf("\n=== TRACE: %s ===\n", src);
     double t0 = now_us();

@@ -39,9 +39,9 @@ int main(void) {
     printf(" FLYWHEEL ENGINE STRESS TEST\n");
     printf("=============================================\n\n");
 
-    /* ============================================================ */
+    
     /* 1. Basics                                                    */
-    /* ============================================================ */
+    
     printf("--- 1. Basic expressions ---\n");
     run_one("num",          "42");
     run_one("add",          "1 + 2");
@@ -58,9 +58,9 @@ int main(void) {
     run_one("loose eq",     "\"5\" == 5");
     run_one("strict neq",   "\"5\" !== 5");
 
-    /* ============================================================ */
+    
     /* 2. Strings                                                   */
-    /* ============================================================ */
+    
     printf("\n--- 2. Strings ---\n");
     run_one("concat",       "\"hello\" + \" \" + \"world\"");
     run_one("length",       "\"hello\".length");
@@ -71,9 +71,9 @@ int main(void) {
     run_one("includes",     "\"hello\".includes(\"ell\")");
     run_one("nested calls", "\"hello\".toUpperCase().toLowerCase()");
 
-    /* ============================================================ */
+    
     /* 3. Variables & assignment                                    */
-    /* ============================================================ */
+    
     printf("\n--- 3. Variables ---\n");
     run_one("let",          "let x = 5; x");
     run_one("const",        "const y = 10; y");
@@ -83,9 +83,9 @@ int main(void) {
     run_one("undefined",    "let z; z");
     run_one("const assign", "const c = 1; c = 2; c");
 
-    /* ============================================================ */
+    
     /* 4. Control flow                                              */
-    /* ============================================================ */
+    
     printf("\n--- 4. Control flow ---\n");
     run_one("if true",      "if (1) 100; else 200");
     run_one("if false",     "if (0) 100; else 200");
@@ -99,9 +99,9 @@ int main(void) {
     run_one("switch",       "let x = 2; let r = 0; switch (x) { case 1: r = 10; break; case 2: r = 20; break; default: r = 30; } r");
     run_one("switch fall",  "let x = 1; let r = ''; switch (x) { case 1: r = r + 'a'; case 2: r = r + 'b'; break; case 3: r = r + 'c'; } r");
 
-    /* ============================================================ */
+    
     /* 5. Functions                                                 */
-    /* ============================================================ */
+    
     printf("\n--- 5. Functions ---\n");
     run_one("fn basic",     "function f(x) { return x * 2; } f(21)");
     run_one("fn two args",  "function add(a, b) { return a + b; } add(3, 4)");
@@ -113,9 +113,9 @@ int main(void) {
     run_one("arrow block",  "let f = x => { return x + 1; }; f(10)");
     run_one("immediate",    "(function() { return 42; })()");
 
-    /* ============================================================ */
+    
     /* 6. Arrays                                                    */
-    /* ============================================================ */
+    
     printf("\n--- 6. Arrays ---\n");
     run_one("lit",          "[1, 2, 3].length");
     run_one("index",        "[10, 20, 30][1]");
@@ -126,9 +126,9 @@ int main(void) {
     run_one("nested",       "[[1, 2], [3, 4]][1][0]");
     run_one("mixed",        "[1, \"two\", true, null]");
 
-    /* ============================================================ */
+    
     /* 7. Objects                                                   */
-    /* ============================================================ */
+    
     printf("\n--- 7. Objects ---\n");
     run_one("lit",          "({ a: 1 }).a");
     run_one("two keys",     "({ a: 1, b: 2 }).a + ({ a: 1, b: 2 }).b");
@@ -139,9 +139,9 @@ int main(void) {
     run_one("assign key",   "let o = { a: 1 }; o.b = 2; o.b");
     run_one("computed",     "let k = \"x\"; ({ [k]: 5 }).x");
 
-    /* ============================================================ */
+    
     /* 8. Templates                                                 */
-    /* ============================================================ */
+    
     printf("\n--- 8. Templates ---\n");
     run_one("plain",        "`hello`");
     run_one("one sub",      "`x=${5}`");
@@ -150,9 +150,9 @@ int main(void) {
     run_one("nested",       "`x=${`y=${1}`}`");
     run_one("var",          "let n = 7; `n=${n}`");
 
-    /* ============================================================ */
+    
     /* 9. try/catch                                                 */
-    /* ============================================================ */
+    
     printf("\n--- 9. try/catch/throw ---\n");
     run_one("throw str",    "try { throw \"err\" } catch (e) { e }");
     run_one("throw num",    "try { throw 42 } catch (e) { e + 1 }");
@@ -160,9 +160,9 @@ int main(void) {
     run_one("nested try",   "try { try { throw 1 } catch (e) { throw e + 1 } } catch (e) { e }");
     run_one("rethrow",      "let r = 0; try { throw 5 } catch (e) { r = e * 2 } r");
 
-    /* ============================================================ */
+    
     /* 10. Natives                                                  */
-    /* ============================================================ */
+    
     printf("\n--- 10. Native objects ---\n");
     run_one("math floor",   "Math.floor(3.7)");
     run_one("math ceil",    "Math.ceil(3.1)");
@@ -176,9 +176,9 @@ int main(void) {
     run_one("json arr",     "JSON.stringify([1, 2, 3])");
     run_one("json nested",  "JSON.stringify({ a: [1, 2], b: { c: 3 } })");
 
-    /* ============================================================ */
+    
     /* 11. Real programs                                            */
-    /* ============================================================ */
+    
     printf("\n--- 11. Composite programs ---\n");
     run_one("fib+array",
         "function fib(n) { if (n < 2) return n; return fib(n-1) + fib(n-2); }"
@@ -206,9 +206,9 @@ int main(void) {
         "}"
         "out");
 
-    /* ============================================================ */
+    
     /* 12. Hostile inputs                                           */
-    /* ============================================================ */
+    
     printf("\n--- 12. Hostile / edge inputs ---\n");
     run_one("empty",        "");
     run_one("whitespace",   "   \n\t  ");
@@ -224,9 +224,9 @@ int main(void) {
     run_one("deep nest",    "((((((((((42))))))))))");
     run_one("stack depth",  "function f(n) { if (n < 1) return 0; return f(n - 1); } f(400)");
 
-    /* ============================================================ */
+    
     /* Summary                                                      */
-    /* ============================================================ */
+    
     printf("\n=============================================\n");
     printf(" TOTAL:       %d\n", total);
     printf(" OK:          %d\n", ok);

@@ -56,16 +56,11 @@ struct Object {
     Value      bound_this;
 };
 
-/* ============================================================
- * Lifecycle
- * ============================================================ */
+/* Lifecycle */
 Object *object_new(Interp *I);
 void    object_free(Object *o);   /* recursive? no — flat, prototype not freed */
 
-/* ============================================================
- * Property access
- * Every function sets I->has_error on internal failure.
- * ============================================================ */
+/* Property access Every function sets I->has_error on internal failure. */
 Value   object_get(Interp *I, Object *o, const char *key);
 Value   object_get_index(Interp *I, Object *o, int idx);
 void    object_set(Interp *I, Object *o, const char *key, Value v);
@@ -75,18 +70,14 @@ void    object_delete(Interp *I, Object *o, const char *key);
 /* Convenience: define a native method on an object. */
 void    object_set_native(Interp *I, Object *o, const char *name, NativeFn fn);
 
-/* ============================================================
- * Arrays (Object with is_array = 1, keys are decimal strings)
- * ============================================================ */
+/* Arrays (Object with is_array = 1, keys are decimal strings) */
 Object *array_new(Interp *I);
 int     array_length(Interp *I, Object *arr);
 Value   array_get(Interp *I, Object *arr, int i);
 void    array_push(Interp *I, Object *arr, Value v);
 void    array_set(Interp *I, Object *arr, int i, Value v);
 
-/* ============================================================
- * Debug
- * ============================================================ */
+/* Debug */
 void    object_print(Object *o);
 
 #endif

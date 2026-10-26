@@ -108,14 +108,7 @@ int tls_record_encrypt_13_aes256gcm(const uint8_t key[32],
 }
 
 
-/* =========================================================
- * TLS 1.2 AEAD encryption
- *
- * Wire format for 1.2 GCM/ChaCha:
- *   [8-byte explicit_nonce][ciphertext][16-byte tag]
- * AAD = seq_num(8) || type(1) || version(2) || length(2)
- * Nonce = fixed_iv (4 or 12 bytes) || explicit_nonce
- * ========================================================= */
+/* TLS 1.2 AEAD encryption Wire format for 1.2 GCM/ChaCha: [8-byte explicit_nonce][ciphertext][16-byte tag] AAD = seq_num(8) || type(1) || version(2) || length(2) Nonce = fixed_iv (4 or 12 bytes) || explicit_nonce */
 
 int tls_record_encrypt_12_aes128gcm(const uint8_t key[16],
                                      const uint8_t fixed_iv[4],

@@ -19,9 +19,7 @@ extern void scope_assign(Node *func_node);
 #include <string.h>
 #include <stdio.h>
 
-/* ============================================================ */
 /* Error messages — one per code                              */
-/* ============================================================ */
 static const char *ERR_MSG[] = {
     [PARSE_OK]                       = "ok",
     [PARSE_ERR_LEXER]                = "lexer error",
@@ -66,9 +64,7 @@ const char *parser_error_code_name(ParseErrorCode c) {
     return m ? m : "?";
 }
 
-/* ============================================================ */
 /* Parser state                                                */
-/* ============================================================ */
 #define MAX_ERRORS_DEFAULT 64
 #define MAX_ERRORS_HARD    4096
 #define MAX_RECURSION_DEPTH 10000  /* ~2000 parens deep — generous but bounded */
@@ -117,9 +113,7 @@ typedef struct {
     int         max_depth;
 } Parser;
 
-/* ============================================================ */
 /* Error recording — never crashes                             */
-/* ============================================================ */
 static void parser_error(Parser *p, ParseErrorCode code, const char *msg,
                          int line, int col) {
     if (!p) return;
@@ -174,9 +168,7 @@ static void parser_error_at_current(Parser *p, ParseErrorCode code,
                  p->current.line, p->current.column);
 }
 
-/* ============================================================ */
 /* Token access                                                */
-/* ============================================================ */
 static void parser_load_next(Parser *p) {
     if (!p || p->fatal) return;
     Token t = lexer_next(&p->lx);
@@ -271,9 +263,7 @@ static __attribute__((unused)) int parser_expect(Parser *p, TokKind kind, const 
     return 0;
 }
 
-/* ============================================================ */
 /* Recovery: skip to a plausible statement boundary            */
-/* ============================================================ */
 static __attribute__((unused)) void parser_synchronize(Parser *p) {
     if (!p || p->fatal) return;
     parser_advance(p);
@@ -451,9 +441,7 @@ void parser_print_errors(const ParseResult *r) {
     }
 }
 
-/* ============================================================ */
 /* Test main — only when built with -DPARSER_TEST              */
-/* ============================================================ */
 #ifdef PARSER_TEST
 int main(int argc, char **argv) {
     const char *src = (argc >= 2) ? argv[1] : "1 + 2 * 3 - 4 / 5";
@@ -964,14 +952,7 @@ static Node *parse_primary(Parser *p) {
     DEPTH_ENTER(p);
     int line = p->current.line, col = p->current.column;
 
-    /* ============================================================
-     * FAST DISPATCH — one switch on the current token kind.
-     * Handles the 9 most common kinds directly (number, string,
-     * ident, paren, bracket, brace, template, regex, bigint).
-     * Only falls through to the keyword chain if the token is
-     * actually a keyword. Same code below, but the compiler emits
-     * a jump table for the switch.
-     * ============================================================ */
+    /* FAST DISPATCH — one switch on the current token kind. Handles the 9 most common kinds directly (number, string, ident, paren, bracket, brace, template, regex, bigint). Only falls through to the keyword chain if the token is actually a keyword. Same code below, but the compiler emits a jump table for the switch. */
     switch (p->current.kind) {
         case TOK_NUMBER:
         case TOK_BIGINT:

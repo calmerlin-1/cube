@@ -9,9 +9,7 @@
 #include <stdio.h>
 #include "crypto_cert.h"
 
-/* =========================================================
- * Context
- * ========================================================= */
+/* Context */
 
 struct crisptls_ctx {
     crisptls_policy_t policy;
@@ -42,9 +40,7 @@ int crisptls_ctx_set_policy(crisptls_ctx_t *ctx, const crisptls_policy_t *policy
     return CRISPTLS_OK;
 }
 
-/* =========================================================
- * Backend selection
- * ========================================================= */
+/* Backend selection */
 
 int crisptls_set_backend(const char *name) {
     if (!name) return CRISPTLS_ERR_ARGS;
@@ -57,9 +53,7 @@ const char *crisptls_get_backend(void) {
     return g_backend;
 }
 
-/* =========================================================
- * Connect / close
- * ========================================================= */
+/* Connect / close */
 
 static char g_last_error[256];
 char g_crisptls_last_fail_step[80] = {0};
@@ -143,9 +137,7 @@ void crisptls_close(crisptls_conn_t *conn) {
     session_free(conn);
 }
 
-/* =========================================================
- * I/O
- * ========================================================= */
+/* I/O */
 
 ssize_t crisptls_read(crisptls_conn_t *conn, void *buf, size_t n) {
     if (!conn || !buf) return CRISPTLS_ERR_ARGS;
@@ -157,9 +149,7 @@ ssize_t crisptls_write(crisptls_conn_t *conn, const void *buf, size_t n) {
     return session_write_app(conn, buf, n);
 }
 
-/* =========================================================
- * Handshake metadata
- * ========================================================= */
+/* Handshake metadata */
 
 int crisptls_get_version(crisptls_conn_t *conn) {
     if (!conn) return 0;
@@ -279,9 +269,7 @@ int crisptls_verify_status(crisptls_conn_t *conn) {
     return conn->verify_result;
 }
 
-/* =========================================================
- * Fingerprint
- * ========================================================= */
+/* Fingerprint */
 
 extern int crisptls_ja3_from_raw(const uint8_t *raw, size_t raw_len,
                                  char *md5_hex_out, size_t cap);
@@ -313,9 +301,7 @@ int crisptls_conn_ja4_hash(crisptls_conn_t *conn, char *out, size_t cap) {
     return CRISPTLS_OK;
 }
 
-/* =========================================================
- * Errors
- * ========================================================= */
+/* Errors */
 
 const char *crisptls_err_name(int err) {
     switch (err) {

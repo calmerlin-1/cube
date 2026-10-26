@@ -25,9 +25,7 @@
 #include <stdio.h>
 #define QUIC_TRACE(...) do { fprintf(stderr, "[quic] " __VA_ARGS__); fputc('\n', stderr); } while (0)
 
-/* =========================================================
- * PN space
- * ========================================================= */
+/* PN space */
 
 void quic_pn_space_init(quic_pn_space_t *sp) {
     if (!sp) return;
@@ -75,9 +73,7 @@ const char *quic_state_name(quic_state_t s) {
     }
 }
 
-/* =========================================================
- * Connection init / free
- * ========================================================= */
+/* Connection init / free */
 
 int quic_conn_init(quic_conn_t *c, const char *host, uint16_t port) {
     if (!c || !host) return -1;
@@ -144,9 +140,7 @@ void quic_conn_free(quic_conn_t *c) {
     quic_udp_close(&c->udp);
 }
 
-/* =========================================================
- * Send ClientInitial
- * ========================================================= */
+/* Send ClientInitial */
 
 int quic_conn_send_initial(quic_conn_t *c) {
     if (!c) return -1;
@@ -261,9 +255,7 @@ int quic_conn_send_initial(quic_conn_t *c) {
     return 0;
 }
 
-/* =========================================================
- * Handshake driver (stub for now)
- * ========================================================= */
+/* Handshake driver (stub for now) */
 
 int quic_conn_process_datagram(quic_conn_t *c, const uint8_t *buf, size_t len) {
     if (!c || !buf) return -1;

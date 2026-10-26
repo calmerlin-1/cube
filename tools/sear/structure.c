@@ -81,11 +81,7 @@ int sear_mode_structure(const sear_file_t *f, const sear_opts_t *o) {
     return 0;
 }
 
-/* ============================================================
- * --section <name>: print the body of a named function.
- * Uses the symbol table to find the definition, then walks
- * braces from that line to the matching close.
- * ============================================================ */
+/* --section <name>: print the body of a named function. Uses the symbol table to find the definition, then walks braces from that line to the matching close. */
 
 typedef struct { const char *name; size_t line_no; } sec_hit_t;
 
