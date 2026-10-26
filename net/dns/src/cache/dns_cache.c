@@ -134,7 +134,7 @@ int dns_cache_get(dns_cache_t *c, const char *name, uint16_t type, uint16_t cls,
         out->rcode = e->rcode;
         out->qtype = type;
         out->qclass = cls;
-        memcpy(out->qname, name, strlen(name) + 1);
+        snprintf(out->qname, sizeof out->qname, "%s", name);
         if (e->rcode == DNS_RCODE_NXDOMAIN) return DNS_ERR_NXDOMAIN;
         return DNS_ERR_RCODE;
     }
@@ -150,7 +150,7 @@ int dns_cache_get(dns_cache_t *c, const char *name, uint16_t type, uint16_t cls,
     out->arena = ar;
     out->qtype = type;
     out->qclass = cls;
-    memcpy(out->qname, name, strlen(name) + 1);
+    snprintf(out->qname, sizeof out->qname, "%s", name);
     return DNS_OK;
 }
 
