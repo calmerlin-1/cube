@@ -238,38 +238,12 @@ int dns_cache_put_host(dns_cache_t *c, const char *name, const char *ip, uint32_
     /* detect v4 vs v6 by colon presence */
     if (strchr(ip, ':')) {
         r->type = DNS_TYPE_AAAA;
-        /* parse IPv6 into 16 bytes */
-        unsigned char buf[16] = {0};
-        unsigned short words[8] = {0};
-        int nw = 0, dcolon = -1;
-        const char *p = ip;
-        for (int i = 0; i < 8 && *p; i++) {
-            if (p[0] == ':' && p[1] == ':') { dcolon = i; p += 2; continue; }
-            if (p[0] == ':') { p++; continue; }
-            unsigned v = 0;
-            int digits = 0;
-            while (*p && *p != ':' && digits < 4) {
-                int h = -1;
-                char c = *p;
-                if (c >= '0' && c <= '9') h = c - '0';
-                else if (c >= 'a' && c <= 'f') h = c - 'a' + 10;
-                else if (c >= 'A' && c <= 'F') h = c - 'A' + 10;
-                if (h < 0) break;
-                v = (v << 4) | h;
-                p++; digits++;
-            }
-            if (nw < 8) words[nw++] = (unsigned short)v;
+        struct in6_addr a6;
+        if (inet_pton(AF_INET6, ip, &a6) != 1) {
+            dns_arena_free(ar);
+            return -1;
         }
-        if (dcolon >= 0) {
-            int move = nw - dcolon;
-            for (int i = move - 1; i >= 0; i--) words[7 - (move - 1 - i)] = words[dcolon + i];
-            for (int i = dcolon; i < 8 - move; i++) words[i] = 0;
-        }
-        for (int i = 0; i < 8; i++) {
-            buf[i*2]   = (unsigned char)(words[i] >> 8);
-            buf[i*2+1] = (unsigned char)(words[i] & 0xFF);
-        }
-        memcpy(r->u.aaaa.addr, buf, 16);
+        memcpy(r->u.aaaa.addr, &a6, 16);
     } else {
         r->type = DNS_TYPE_A;
         int a1, a2, a3, a4;
