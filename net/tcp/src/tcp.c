@@ -349,6 +349,7 @@ int tcp_peer(int fd, char *ip, size_t cap, uint16_t *port) {
 }
 
 int tcp_local(int fd, char *ip, size_t cap, uint16_t *port) {
+    if (!ip || cap < 46) { cube_set_errno_inval(); return -1; }
     struct sockaddr_storage ss; socklen_t slen = sizeof ss;
     if (getsockname(fd, (struct sockaddr *)&ss, &slen) != 0) return -1;
     const void *src = NULL;
