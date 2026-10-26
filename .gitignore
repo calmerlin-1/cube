@@ -47,3 +47,7 @@ tools/dbug/dbug
 tools/dbug/demo
 tools/sear/sear
 cube_debug
+tests/fuzz/artifacts/
+tests/fuzz/logs/
+*.c.new
+/fuzz-all.sh
