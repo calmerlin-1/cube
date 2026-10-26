@@ -409,11 +409,13 @@ static url_err parse_impl(const char *s, size_t len, uint32_t flags, url_view *o
 
 url_err url_parse(const char *s, size_t len, url_view *out) {
     if (!out) return URL_ERR_EMPTY;
+    memset(out, 0, sizeof(*out));   /* zero on all exits, including early error */
     return parse_impl(s, len, 0, out);
 }
 
 url_err url_parse_ex(const char *s, size_t len, uint32_t flags, url_view *out) {
     if (!out) return URL_ERR_EMPTY;
+    memset(out, 0, sizeof(*out));   /* zero on all exits */
     return parse_impl(s, len, flags, out);
 }
 
