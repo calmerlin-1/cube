@@ -214,8 +214,14 @@ int tcp_connect(const char *ip, int family, uint16_t port,
     /* Sensible defaults. Callers may override via tcp_set_* afterwards,
      * but these get used during connect. */
     int one = 1;
-    setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof one);
-    setsockopt(fd, SOL_SOCKET,  SO_KEEPALIVE, &one, sizeof one);
+    if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof one) < 0) {
+        set_err(err, err_cap, "setsockopt TCP_NODELAY: %s", cube_socket_err_str(cube_errno));
+        cube_close(fd); return -1;
+    }
+    if (setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &one, sizeof one) < 0) {
+        set_err(err, err_cap, "setsockopt SO_KEEPALIVE: %s", cube_socket_err_str(cube_errno));
+        cube_close(fd); return -1;
+    }
 
     /* Set non-blocking during connect so we can enforce a timeout via poll. */
     int fl = cube_set_nonblock(fd, 1);
