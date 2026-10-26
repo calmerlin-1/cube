@@ -166,8 +166,10 @@ static size_t normalize_path(const char *in, size_t in_len,
                 }
                 continue;
             }
-            /* normal segment — copy '/' and advance */
-            out[w++] = '/';
+            /* normal segment — write '/' only if not already there.
+             * After '..' pops, out[w-1] is already '/', so unconditional
+             * '/' here produces '/a//c' from '/a/b/../c'. */
+            if (w == 0 || out[w-1] != '/') out[w++] = '/';
             i++;
             continue;
         }
@@ -609,7 +611,8 @@ int url_same_host(const url_view *a, const url_view *b) {
 
 int url_same_origin(const url_view *a, const url_view *b) {
     if (!slice_ci_eq(a->scheme, a->scheme_len, b->scheme, b->scheme_len)) return 0;
-    if (!slice_ci_eq(a->host, a->host_len, b->host, b->host_len)) return 0;
+    /* #22: use url_same_host for trailing-dot strip (RFC 6454). */
+    if (!url_same_host(a, b)) return 0;
     return a->port == b->port;
 }
 
