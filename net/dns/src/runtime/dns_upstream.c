@@ -197,6 +197,11 @@ int dns_upstream_load(dns_upstream_pool_t *p, const char *path) {
     while (fscanf(f, "%127s %u %u %llu %llu %llu %u %llu\n",
                   addr, &port, &proto,
                   &ema, &ok, &fail, &consec, &score) == 8) {
+        /* DNS-8: fscanf %u / %llu on "-1" yields UINT_MAX / ULLONG_MAX.
+         * Reject nonsense; skip the line without mutating the pool. */
+        if (port == 0 || port > 65535) continue;
+        if (proto > 3) continue;
+        if (consec > 1000000) continue;
         for (size_t i = 0; i < p->count; i++) {
             dns_upstream_t *u = &p->items[i];
             if (strcmp(u->addr, addr) == 0 && u->port == port && u->proto == proto) {
