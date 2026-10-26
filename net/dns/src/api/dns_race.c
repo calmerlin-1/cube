@@ -240,7 +240,7 @@ int dns_race_query_staged(dns_upstream_pool_t *pool,
 
     /* cleanup any remaining sockets */
     for (int i = 0; i < RACE_MAX; i++) {
-        if (slots[i].fd > 0) close(slots[i].fd);
+        if (slots[i].fd >= 0) close(slots[i].fd);
     }
 
     if (out_stats) out_stats->phases_run = in_phase3 ? 3 : (next_phase2 > 1 ? 2 : 1);
