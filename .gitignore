@@ -38,7 +38,6 @@ tools/erdict/erdict
 net/dns/cache/
 net/crisptls/cache/
 tests/.results/
-**/cache/
 **/.results/
 
 # Compiled binaries tracked by accident
