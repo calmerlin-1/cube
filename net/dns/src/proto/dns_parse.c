@@ -135,6 +135,7 @@ int dns_wire_parse_response(const uint8_t *pkt, size_t pkt_len,
         dns_record_t *r = &recs[out->count];
         int pr = parse_rr(pkt, pkt_len, &off, r, arena);
         if (pr == 0) { dns_arena_free(arena); out->arena = NULL; return DNS_ERR_WIRE; }
+        if (pr == 2) { dns_arena_free(arena); out->arena = NULL; return DNS_ERR_WIRE; }   /* OPT in answer: malformed */
         if (pr == 1) out->count++;
     }
 
