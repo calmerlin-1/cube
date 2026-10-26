@@ -143,7 +143,9 @@ static int set_port(struct sockaddr_storage *ss, uint16_t port) {
 /* Wait for fd readability/writability with ms timeout. 0 = block forever. */
 static int wait_fd(int fd, short events, uint32_t timeout_ms) {
     cube_pollfd p = { fd, events, 0 };
-    int t = (timeout_ms == 0) ? -1 : (int)timeout_ms;
+    int t = (timeout_ms == 0) ? -1
+          : (timeout_ms > (uint32_t)INT_MAX) ? INT_MAX
+          : (int)timeout_ms;
     for (;;) {
         int r = cube_poll(&p, 1, t);
         if (r < 0 && cube_socket_err_is_eintr(cube_errno)) continue;
