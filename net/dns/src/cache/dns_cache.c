@@ -157,6 +157,7 @@ int dns_cache_get(dns_cache_t *c, const char *name, uint16_t type, uint16_t cls,
 void dns_cache_put(dns_cache_t *c, const char *name, uint16_t type, uint16_t cls,
                    const dns_answer_t *answer, uint32_t ttl_override) {
     if (!c || !name || !answer) return;
+    if (strchr(name, ' ')) return;   /* DNS-5: space breaks save/load round-trip */
     entry_t *old = find(c, name, type, cls);
     if (old) free_entry(c, old);
 
