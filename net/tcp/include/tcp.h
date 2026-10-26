@@ -29,7 +29,7 @@
 #include <stdint.h>
 #include <sys/types.h>
 
-/* ─── Connect ─────────────────────────────────────────────────────── */
+/* Connect */
 
 /* Connect to an already-resolved IP.
  * - ip:         "1.2.3.4" or an IPv6 string. NOT a hostname.
@@ -42,7 +42,7 @@ int tcp_connect(const char *ip, int family, uint16_t port,
                 uint32_t timeout_ms,
                 char *err, size_t err_cap);
 
-/* ─── Tuning ──────────────────────────────────────────────────────── */
+/* Tuning */
 
 int tcp_set_nodelay    (int fd, int on);   /* TCP_NODELAY         */
 int tcp_set_keepalive  (int fd, int on);   /* SO_KEEPALIVE        */
@@ -51,7 +51,7 @@ int tcp_set_rcvbuf     (int fd, int bytes);/* SO_RCVBUF           */
 int tcp_set_sndbuf     (int fd, int bytes);/* SO_SNDBUF           */
 int tcp_set_reuseaddr  (int fd, int on);   /* SO_REUSEADDR (pre-bind) */
 
-/* ─── I/O with per-call timeout ───────────────────────────────────── */
+/* I/O with per-call timeout */
 
 /* Return bytes transferred, 0 on clean close (read only), -1 on error.
  * timeout_ms: 0 = block indefinitely. Otherwise use poll() internally. */
@@ -63,7 +63,7 @@ ssize_t tcp_write(int fd, const void *buf, size_t n, uint32_t timeout_ms);
 int tcp_read_exact (int fd, void *buf, size_t n, uint32_t timeout_ms);
 int tcp_write_all  (int fd, const void *buf, size_t n, uint32_t timeout_ms);
 
-/* ─── Half-close / close ──────────────────────────────────────────── */
+/* Half-close / close */
 
 /* SHUT_WR: send FIN, keep reading. Some protocols need this (HTTP/1.0). */
 int tcp_shutdown_write(int fd);
@@ -71,14 +71,14 @@ int tcp_shutdown_write(int fd);
 /* Close (idempotent; safe with fd < 0). */
 void tcp_close(int fd);
 
-/* ─── Peer / local info ───────────────────────────────────────────── */
+/* Peer / local info */
 
 /* Fill ip (dotted or v6) and port. Returns 0 on success, -1 on error.
  * ip_cap should be at least 46 bytes (INET6_ADDRSTRLEN). */
 int tcp_peer (int fd, char *ip, size_t ip_cap, uint16_t *port);
 int tcp_local(int fd, char *ip, size_t ip_cap, uint16_t *port);
 
-/* ─── IP validation & helpers ─────────────────────────────────────── */
+/* IP validation & helpers */
 
 /* Return AF_INET, AF_INET6, or -1 if not a valid IP literal. */
 int tcp_ip_family(const char *ip);

@@ -67,7 +67,7 @@
     #define cube_socket_err_is_eagain(e)    ((e) == EAGAIN || (e) == EWOULDBLOCK)
     #define cube_socket_err_str(e)          strerror(e)
 #endif
-/* ─── portable errno helpers ──────────────────────────────────────── */
+/* portable errno helpers */
 #ifdef _WIN32
 static int  cube_set_nonblock(int fd, int on) { u_long m = on?1:0; return ioctlsocket(fd, FIONBIO, &m); }
 static int  cube_errno_is_inprogress(int e)   { return e == WSAEWOULDBLOCK; }
@@ -92,7 +92,7 @@ static void cube_set_errno(int e)             { errno = e ? e : EINVAL; }
 #include <stdlib.h>
 #include <ctype.h>
 
-/* ─── helpers ─────────────────────────────────────────────────────── */
+/* helpers */
 
 static void set_err(char *err, size_t cap, const char *fmt, ...) {
     if (!err || cap == 0) return;
@@ -153,7 +153,7 @@ static int wait_fd(int fd, short events, uint32_t timeout_ms) {
     }
 }
 
-/* ─── public API ──────────────────────────────────────────────────── */
+/* public API */
 
 int tcp_ip_family(const char *ip) {
     struct in_addr  a4;
@@ -251,7 +251,7 @@ int tcp_connect(const char *ip, int family, uint16_t port,
     return fd;
 }
 
-/* ─── tuning ──────────────────────────────────────────────────────── */
+/* tuning */
 
 int tcp_set_nodelay(int fd, int on) {
     return setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof on);
@@ -274,7 +274,7 @@ int tcp_set_reuseaddr(int fd, int on) {
     return setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof on);
 }
 
-/* ─── I/O ─────────────────────────────────────────────────────────── */
+/* I/O */
 
 ssize_t tcp_read(int fd, void *buf, size_t n, uint32_t timeout_ms) {
     if (fd < 0 || (!buf && n)) { cube_set_errno_inval(); return -1; }
@@ -317,7 +317,7 @@ int tcp_write_all(int fd, const void *buf, size_t n, uint32_t timeout_ms) {
     return 0;
 }
 
-/* ─── close ───────────────────────────────────────────────────────── */
+/* close */
 
 int tcp_shutdown_write(int fd) {
     if (fd < 0) return -1;
@@ -328,7 +328,7 @@ void tcp_close(int fd) {
     if (fd >= 0) cube_close(fd);
 }
 
-/* ─── peer / local ────────────────────────────────────────────────── */
+/* peer / local */
 
 int tcp_peer(int fd, char *ip, size_t cap, uint16_t *port) {
     struct sockaddr_storage ss; socklen_t slen = sizeof ss;
@@ -360,7 +360,7 @@ int tcp_local(int fd, char *ip, size_t cap, uint16_t *port) {
     return 0;
 }
 
-/* ─── range helpers ───────────────────────────────────────────────── */
+/* range helpers */
 
 /* IPv4 range: "A.B.C.D-A.B.C.E". Only 32-bit arithmetic; safe for /16
  * scans and smaller. For IPv6, ranges are rejected. */
