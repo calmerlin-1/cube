@@ -71,6 +71,7 @@ typedef struct {
     int         show_ja4;
     int         follow;      /* follow redirects */
     int         insecure;    /* skip cert verification */
+    int         advisory;    /* warn on cert failure, do not abort */
     int         no_tls;      /* force plain HTTP */
     int         force_http1; /* force ALPN=http/1.1 */
     int         color_mode;  /* 0=auto, 1=force (--color), 2=never (--no-color) */
@@ -582,6 +583,7 @@ static int parse_args(int argc, char **argv, cube_opts_t *o,
         if (!strcmp(a, "-L") || !strcmp(a, "--follow"))  { o->follow = 1; continue; }
         if (!strcmp(a, "--no-follow"))    { o->follow = 0; continue; }
         if (!strcmp(a, "--insecure"))     { o->insecure = 1; continue; }
+        if (!strcmp(a, "--advisory"))     { o->advisory = 1; continue; }
         if (!strcmp(a, "--no-tls"))       { o->no_tls = 1; continue; }
         if (!strcmp(a, "--http1"))        { o->force_http1 = 1; continue; }
         if (!strcmp(a, "--show-cert"))    { o->show_cert = 1; continue; }
@@ -1068,7 +1070,9 @@ static int fetch_response(const cube_opts_t *o, const char *url,
             } else {
                 crisptls_policy_default(&pol);
             }
+            pol.verify_peer = 2;
             if (o->insecure) { pol.verify_peer = 0; pol.verify_hostname = 0; }
+            else if (o->advisory) { pol.verify_peer = 1; }
             if (o->force_http1) { pol.alpn = "http/1.1"; pol.strict_alpn = 0; }
 
             crisptls_ctx_t *tls_ctx = crisptls_ctx_new(&pol);

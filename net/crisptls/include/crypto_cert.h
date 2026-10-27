@@ -15,6 +15,7 @@
 #define CERT_ERR_HOST   -6
 #define CERT_ERR_CHAIN  -7
 #define CERT_ERR_CA_MISSING -8
+#define CERT_ERR_UNSUPPORTED -9  /* chain uses a sig alg we don't implement natively */
 
 /** Verify a certificate chain against a CA bundle for the given hostname.
  *

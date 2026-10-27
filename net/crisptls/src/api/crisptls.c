@@ -101,6 +101,7 @@ crisptls_conn_t *crisptls_connect(crisptls_ctx_t *ctx, int fd, const char *sni_h
             case CERT_ERR_SIG:         s->verify_result = CRISPTLS_VERIFY_BADCHAIN;   why = "chain signature invalid"; break;
             case CERT_ERR_CHAIN:       s->verify_result = CRISPTLS_VERIFY_UNTRUSTED;  why = "chain does not reach trusted root"; break;
             case CERT_ERR_CA_MISSING:  s->verify_result = CRISPTLS_VERIFY_UNTRUSTED;  why = "no CA bundle found"; break;
+            case CERT_ERR_UNSUPPORTED: s->verify_result = CRISPTLS_VERIFY_UNTRUSTED;  why = "signature algorithm not supported"; break;
             default:                   s->verify_result = CRISPTLS_VERIFY_UNTRUSTED;  why = "certificate verification failed"; break;
         }
         if (vrc != CERT_OK) {
@@ -113,6 +114,12 @@ crisptls_conn_t *crisptls_connect(crisptls_ctx_t *ctx, int fd, const char *sni_h
                     fprintf(stderr, "[!] cert verify: %s%s\n",
                             why ? why : "cert verify failed",
                             s->policy.verify_peer >= 2 ? " (strict: refusing)" : " (advisory)");
+            }
+            /* An algorithm we cannot verify is never advisory. */
+            if (vrc == CERT_ERR_UNSUPPORTED) {
+                snprintf(g_last_error, sizeof g_last_error, "%s", why ? why : "unsupported algorithm");
+                session_free(s);
+                return NULL;
             }
             if (s->policy.verify_peer >= 2) {
                 snprintf(g_last_error, sizeof g_last_error, "%s", why ? why : "cert verify failed");

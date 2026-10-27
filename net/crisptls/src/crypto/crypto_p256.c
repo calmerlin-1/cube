@@ -58,10 +58,10 @@ static const uint64_t GY64[4] = {
 
 /* p - 2, for Fermat inversion */
 static const uint64_t PM2_64[4] = {
-    0xFFFFFFFFFFFFFFFDull,
-    0x00000000FFFFFFFFull,
+    0xfffffffffffffffdull,
+    0x00000000ffffffffull,
     0x0000000000000000ull,
-    0xFFFFFFFF00000001ull
+    0xffffffff00000001ull,
 };
 /* R mod p = 2^256 mod p. Used by Barrett reduction and other folds. */
 static const uint64_t R_MOD_P[4] = {
@@ -129,9 +129,9 @@ static void fe64_add(uint64_t r[4], const uint64_t a[4], const uint64_t b[4]) {
      * a+b-p = (2^256 - p) + t = c + t, with c+t < 2^256. */
     static const uint64_t C64[4] = {
         0x0000000000000001ull,
-        0xFFFFFFFF00000000ull,
-        0xFFFFFFFFFFFFFFFFull,
-        0x00000000FFFFFFFEull
+        0xffffffff00000000ull,
+        0xffffffffffffffffull,
+        0x00000000fffffffeull,
     };
     uint64_t sum[4];
     fe64_add_raw(sum, t, C64);
@@ -174,10 +174,10 @@ static void fe64_reduce(uint64_t r[4], uint64_t t[8]) {
     /* Barrett reduction for P-256. t < p² (512-bit), r = t mod p. */
     static const uint64_t MU[5] = {
         0x0000000000000003ull,
-        0xFFFFFFFEFFFFFFFFull,
-        0xFFFFFFFEFFFFFFFEull,
-        0x00000000FFFFFFFFull,
-        0x0000000000000001ull
+        0xfffffffeffffffffull,
+        0xfffffffefffffffeull,
+        0x00000000ffffffffull,
+        0x0000000000000001ull,
     };
 
     /* q1 = t >> 192 = t[3..7] (5 limbs) */
@@ -203,18 +203,17 @@ static void fe64_reduce(uint64_t r[4], uint64_t t[8]) {
     uint64_t r1[5] = { t[0], t[1], t[2], t[3], t[4] };
 
     /* r2 = (q3 * P64) mod 2^320 (5×4 → 9, keep low 5) */
-    uint64_t r2[6] = {0};
+    uint64_t r2[5] = {0};
     for (int i = 0; i < 5; i++) {
         unsigned __int128 carry = 0;
-        for (int j = 0; j < 4; j++) {
+        for (int j = 0; j < 4 && i + j < 5; j++) {
             unsigned __int128 prod = (unsigned __int128)q3[i] * P64[j]
                                     + r2[i+j] + carry;
             r2[i+j] = (uint64_t)prod;
             carry = prod >> 64;
         }
-        if (i + 4 < 6) {
-            unsigned __int128 v = (unsigned __int128)r2[i+4] + (uint64_t)carry;
-            r2[i+4] = (uint64_t)v;
+        if (i + 4 < 5) {
+            r2[i+4] += (uint64_t)carry;
         }
     }
 
@@ -545,7 +544,6 @@ int ct_p256_keypair(uint8_t priv[32], uint8_t pub_uncompressed[65]) {
 /* ECDH: compute shared secret = priv · peer_pub (X-coordinate only, 32 bytes BE). */
 int ct_p256_ecdh(uint8_t shared[32],
                  const uint8_t priv[32], const uint8_t peer_pub[65]) {
-    if (g_crisptls_trace) fprintf(stderr, "[p256] prefix=0x%02x\n", peer_pub[0]);
     if (peer_pub[0] != 0x04) return -1;
 
     uint64_t k[4], px[4], py[4];
@@ -557,11 +555,9 @@ int ct_p256_ecdh(uint8_t shared[32],
 
     ge64_t P, Q;
     ge64_from_affine(&P, px, py);
-    if (g_crisptls_trace) fprintf(stderr, "[p256] P.Z[0]=%llx\n", (unsigned long long)P.Z[0]);
     ge64_mul(&Q, k, &P);
     if (g_crisptls_trace) fprintf(stderr, "[p256] Q.Z[0]=%llx Q.Z[3]=%llx\n",
             (unsigned long long)Q.Z[0], (unsigned long long)Q.Z[3]);
-    if (ge64_is_infinity(&Q)) { if (g_crisptls_trace) fprintf(stderr, "[p256] infinity!\n"); return -1; }
 
     uint64_t qx[4], qy[4];
     ge64_to_affine(qx, qy, &Q);
@@ -991,10 +987,10 @@ static const uint64_t N_ORDER[4] = {
 
 /* n - 2, for Fermat inversion mod n. */
 static const uint64_t N_M2[4] = {
-    0xF3B9CAC2FC63254Full,
-    0xBCE6FAADA7179E84ull,
-    0xFFFFFFFFFFFFFFFFull,
-    0xFFFFFFFF00000000ull
+    0xf3b9cac2fc63254full,
+    0xbce6faada7179e84ull,
+    0xffffffffffffffffull,
+    0xffffffff00000000ull,
 };
 
 /* Compare a < b, both as big-endian 256-bit (uint64 limbs little-endian). */
@@ -1129,7 +1125,8 @@ int ct_verify_ecdsa_p256_sha256(const uint8_t *pub_der, size_t pub_der_len,
 
     /* Parse SPKI to (px, py). */
     uint64_t px[4], py[4];
-    if (parse_spki_p256(pub_der, pub_der_len, px, py) != 0) return CT_ERR_VERIFY;
+    int spki_rc = parse_spki_p256(pub_der, pub_der_len, px, py);
+    if (spki_rc != 0) return CT_ERR_VERIFY;
 
     /* Parse ECDSA-Sig-Value DER to (r, s). */
     uint64_t r[4], s[4];
