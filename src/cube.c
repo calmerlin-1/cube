@@ -1258,9 +1258,13 @@ static int run_one(const cube_opts_t *o_in,
             fprintf(stderr, "%s[http]%s redirect %d -> %s\n", col_magenta(), col_reset(), resp.status_code, loc);
 
         url_view base;
+        char norm_buf[2048];
+        size_t norm_len = 0;
         char joined[2048];
         size_t jlen = 0;
-        if (url_parse_whatwg(o.url, strlen(o.url), &base) != URL_OK) break;
+        if (url_parse_whatwg_stable(o.url, strlen(o.url),
+                                    norm_buf, sizeof norm_buf, &norm_len,
+                                    &base) != URL_OK) break;
         if (url_join(&base, loc, strlen(loc), joined, sizeof joined, &jlen) != URL_OK) break;
 
         http_response_free(&resp);
