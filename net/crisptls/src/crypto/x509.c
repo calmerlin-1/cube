@@ -10,6 +10,7 @@
 /* OIDs for signature algorithms we recognise. */
 static const char OID_RSA_PSS_SHA256[] = "1.2.840.113549.1.1.10";  /* RSASSA-PSS */
 static const char OID_ECDSA_P256_SHA256[] = "1.2.840.10045.4.3.2";
+static const char OID_ECDSA_P384_SHA384[] = "1.2.840.10045.4.3.3";
 static const char OID_RSA_PKCS1_SHA256[] = "1.2.840.113549.1.1.11";
 #define T_SEQ  0x30
 #define T_SET  0x31
@@ -390,6 +391,9 @@ int ct_x509_verify_sig(const ct_x509_cert *c, const ct_x509_cert *issuer) {
     /* Verify functions expect full SPKI DER (not the extracted raw key
      * bits). parse_spki_p256 hard-checks the exact 91-byte P-256 SPKI
      * prefix; crypto_ec.c calls d2i_PUBKEY which also wants SPKI DER. */
+    printf("[X509_SIG] got='%s' (len=%zu) | want P384='%s' | want PKCS1='%s' | want P256='%s'\n",
+           c->sigalg_oid, strlen(c->sigalg_oid),
+           OID_ECDSA_P384_SHA384, OID_RSA_PKCS1_SHA256, OID_ECDSA_P256_SHA256);
     if (strcmp(c->sigalg_oid, OID_RSA_PKCS1_SHA256) == 0) {
         return ct_verify_rsa_pkcs1_sha256(issuer->spki_der, issuer->spki_len,
                                           c->tbs_der, c->tbs_len,
@@ -405,7 +409,13 @@ int ct_x509_verify_sig(const ct_x509_cert *c, const ct_x509_cert *issuer) {
                                            c->tbs_der, c->tbs_len,
                                            c->sig, c->sig_len);
     }
-    /* P-384 and Ed25519 deferred to crypto_ec.c native rewrite. */
+
+    if (strcmp(c->sigalg_oid, OID_ECDSA_P384_SHA384) == 0) {
+        return ct_verify_ecdsa_p384_sha384(issuer->spki_der, issuer->spki_len,
+                                           c->tbs_der, c->tbs_len,
+                                           c->sig, c->sig_len);
+    }
+    printf("[X509_SIG] unsupported sigalg='%s'\n", c->sigalg_oid);
     return CT_X509_ERR_UNSUPPORTED;
 }
 

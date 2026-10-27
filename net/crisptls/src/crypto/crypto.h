@@ -100,6 +100,9 @@ int ct_verify_rsa_pkcs1_sha256(const uint8_t *pub_der, size_t pub_der_len,
 int ct_verify_ecdsa_p256_sha256(const uint8_t *pub_der, size_t pub_der_len,
                                 const uint8_t *msg, size_t msg_len,
                                 const uint8_t *sig, size_t sig_len);
+int ct_verify_ecdsa_p384_sha384(const uint8_t *pub_der, size_t pub_der_len,
+                                const uint8_t *msg, size_t msg_len,
+                                const uint8_t *sig, size_t sig_len);
 int ct_verify_ed25519(const uint8_t pub[32],
                       const uint8_t *msg, size_t msg_len,
                       const uint8_t sig[64]);

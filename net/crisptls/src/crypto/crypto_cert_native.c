@@ -318,6 +318,7 @@ static int chain_anchors_directly(const ct_x509_cert *last, const ca_bundle_t *b
 int cert_verify_chain(const uint8_t *const *chain, const size_t *chain_lens, size_t n,
                       const char *host, const char *ca_bundle_path,
                       size_t *verified_chain_len_out) {
+    printf("[CVC] ENTER host='%s' n=%zu\n", host, n);
     if (!chain || !chain_lens || n == 0 || !host) return CERT_ERR_ARGS;
     if (n > MAX_CHAIN_CERTS) return CERT_ERR_CHAIN;
 
@@ -329,10 +330,12 @@ int cert_verify_chain(const uint8_t *const *chain, const size_t *chain_lens, siz
     for (size_t i = 0; i < n; i++) {
         if (!chain[i] || chain_lens[i] == 0) { rc = CERT_ERR_ARGS; goto done; }
         if (ct_x509_parse(chain[i], chain_lens[i], &certs[parsed]) != CT_X509_OK) {
+            printf("[CVC] parse failed at cert %zu\n", i);
             rc = CERT_ERR_PARSE; goto done;
         }
         parsed++;
     }
+    printf("[CVC] parsed %zu certs\n", parsed);
 
     /* ---- 2. Validity window (single clock sample, consistent across chain) ---- */
     {
@@ -406,5 +409,6 @@ int cert_verify_chain(const uint8_t *const *chain, const size_t *chain_lens, siz
 done:
     /* ct_x509_cert holds only pointers into caller-owned DER + fixed buffers.
      * Nothing heap-allocated per cert. */
+    printf("[CVC] EXIT rc=%d\n", rc);
     return rc;
 }

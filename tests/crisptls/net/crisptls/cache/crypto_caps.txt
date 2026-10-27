@@ -1,0 +1,19 @@
+# crisptls crypto capabilities
+version 1
+hwcap 0
+has_aes 1
+has_pmull 1
+has_sha1_hw 1
+has_sha2_hw 1
+has_crc32 1
+aes128gcm_mbps 0.97
+aes256gcm_mbps 0.91
+chacha20_mbps 55.12
+sha256_mbps 39.01
+sha384_mbps 62.05
+hmac_sha256_mbps 35.36
+x25519_ops_per_sec 1926
+prefer_aes_gcm 0
+prefer_sha256 0
+probed_at_ns 1793096477035133282
+probe_duration_ms 2210
