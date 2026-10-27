@@ -49,6 +49,8 @@ CUBE   = cube
 
 .PHONY: all clean libs info test integration-test help
 
+all: libs $(CUBE)
+
 test:
 	@$(MAKE) -C tests test
 
@@ -63,7 +65,6 @@ help:
 	@echo "  make clean        — clean all build outputs"
 	@echo "  make info         — show compiler and flags"
 
-all: libs $(CUBE)
 
 # Build the sub-library Makefiles first.
 libs:
