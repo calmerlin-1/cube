@@ -100,11 +100,25 @@ static const char *find_ca_bundle(const char *override) {
         }
     }
 
+    /* Standard OpenSSL-compatible env var — highest priority. */
+    const char *env_file = getenv("SSL_CERT_FILE");
+    if (env_file && *env_file) {
+        FILE *f = fopen(env_file, "r");
+        if (f) { fclose(f); return env_file; }
+    }
+
+    /* Portable path list: every common Unix distro, Termux, macOS, FHS install. */
     static const char *defaults[] = {
-        "/etc/ssl/certs/ca-certificates.crt",
-        "/etc/pki/tls/certs/ca-bundle.crt",
-        "/etc/ssl/cert.pem",
-        "/etc/ssl/ca-bundle.pem",
+        "/etc/ssl/certs/ca-certificates.crt",       /* Debian, Ubuntu, Mint */
+        "/etc/pki/tls/certs/ca-bundle.crt",         /* RHEL, Fedora, CentOS */
+        "/etc/ssl/cert.pem",                        /* Alpine, macOS, BSD */
+        "/etc/ssl/ca-bundle.pem",                   /* OpenSUSE */
+        "/data/data/com.termux/files/usr/etc/tls/cert.pem", /* Termux */
+        "/usr/local/etc/ca-certificates/cert.pem", /* Homebrew Intel */
+        "/opt/homebrew/etc/ca-certificates/cert.pem", /* Homebrew ARM */
+        "/usr/local/share/cube/cacert.pem",         /* FHS install */
+        "/usr/share/cube/cacert.pem",               /* FHS install */
+        "/data/data/com.termux/files/usr/share/cube/cacert.pem", /* Termux install */
         NULL
     };
     for (int i = 0; defaults[i]; i++) {

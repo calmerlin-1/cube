@@ -8,7 +8,7 @@ SRC_DIRS = src/api src/tokenizer src/parser src/match src/runtime
 SRCS = $(foreach d, $(SRC_DIRS), $(wildcard $(d)/*.c))
 OBJS = $(patsubst src/%.c, build/%.o, $(SRCS))
 
-CFLAGS = -O2 -Wall -Wextra -Iinclude -Isrc/tokenizer -Isrc/parser -Isrc/runtime
+CFLAGS ?= -O2 -Wall -Wextra -Iinclude -Isrc/tokenizer -Isrc/parser -Isrc/runtime
 LIB    = build/libcss.a
 
 .PHONY: all clean test test_css fuzz fuzz_hard fuzz_chaos

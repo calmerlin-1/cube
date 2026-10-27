@@ -27,7 +27,7 @@ JSON_INC       = flywheel/json/include
 UTILS_LIB      = utils/build/libutils.a
 UTILS_INC      = utils
 
-CFLAGS = -O2 -I. -Iutils -Wall -Wextra \
+CFLAGS = -O1 -I. -Iutils -Wall -Wextra \
          -I$(CRISPTLS_INC) \
          -I$(DNS_INC) \
          -I$(TCP_INC) \
@@ -41,6 +41,10 @@ CFLAGS = -O2 -I. -Iutils -Wall -Wextra \
 
 LIBS   = -lcrypto -lsodium -lssl
 
+# Every subdir with a Makefile. Order matters for cross-subdir deps.
+SUBDIRS = utils flywheel/json flywheel/css flywheel/url flywheel/html flywheel/dom \
+          net/tcp net/dns net/crisptls net/http_client
+
 CUBE   = cube
 
 .PHONY: all clean libs info
@@ -49,18 +53,12 @@ all: libs $(CUBE)
 
 # Build the sub-library Makefiles first.
 libs:
-	@$(MAKE) -C flywheel/json    >/dev/null
-	@$(MAKE) -C utils           >/dev/null
-	@$(MAKE) -C net/tcp         >/dev/null
-	@$(MAKE) -C net/dns         >/dev/null
-	@$(MAKE) -C net/crisptls    >/dev/null
-	@$(MAKE) -C net/http_client >/dev/null
-	@$(MAKE) -C flywheel/url    >/dev/null
-	@$(MAKE) -C flywheel/css    >/dev/null
-	@$(MAKE) -C flywheel/dom    >/dev/null
+	@set -e; for d in $(SUBDIRS); do \
+	    if [ -f "$$d/Makefile" ]; then $(MAKE) -C "$$d" >/dev/null || exit 1; fi; \
+	done
 	@echo "  all libs built"
 
-$(CUBE): src/cube.c $(CRISPTLS_LIB) $(DNS_LIB) $(TCP_LIB) $(HTTP_LIB) $(URL_LIB) $(HTML_LIB) $(DOM_LIB) $(CSS_LIB) $(JSON_LIB) $(UTILS_LIB)
+$(CUBE): libs src/cube.c $(CRISPTLS_LIB) $(DNS_LIB) $(TCP_LIB) $(HTTP_LIB) $(URL_LIB) $(HTML_LIB) $(DOM_LIB) $(CSS_LIB) $(JSON_LIB) $(UTILS_LIB)
 	$(CC) $(CFLAGS) src/cube.c \
 	    $(HTTP_LIB) \
 	    $(CRISPTLS_LIB) \

@@ -21,7 +21,7 @@ LIB = build/libquic.a
 # Long-term these should be re-exported under include/, but for now
 # this is pragmatic and contained to net/quic/.
 CRISPTLS_SRC = ../crisptls/src
-CFLAGS = -O2 -Wall -Wextra \
+CFLAGS ?= -O2 -Wall -Wextra \
          -Iinclude \
          -I$(CRISPTLS_INC) \
          -I$(CRISPTLS_SRC)/crypto \

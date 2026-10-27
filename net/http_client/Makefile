@@ -15,7 +15,7 @@ OBJS = $(patsubst src/%.c, build/%.o, $(SRCS))
 
 LIB = build/libhttp_client.a
 
-CFLAGS = -O2 -I../../utils -I../.. -Wall -Wextra -Iinclude -Isrc/http2
+CFLAGS ?= -O2 -I../../utils -I../.. -Wall -Wextra -Iinclude -Isrc/http2
 LIBS   =
 
 .PHONY: all clean info test

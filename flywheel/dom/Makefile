@@ -16,7 +16,7 @@ OBJS = $(patsubst src/%.c, build/%.o, $(SRCS))
 
 LIB = build/libdom.a
 
-CFLAGS = -O2 -Wall -Wextra \
+CFLAGS ?= -O2 -Wall -Wextra \
          -Iinclude \
          -I$(HTML_INC) -I$(HTML_SRC)/runtime \
          -I$(CSS_INC)  -I$(CSS_SRC)/runtime \

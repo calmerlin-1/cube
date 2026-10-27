@@ -7,7 +7,7 @@ SRC_DIRS = src src/runtime
 SRCS = $(wildcard src/*.c) $(wildcard src/runtime/*.c)
 OBJS = $(patsubst src/%.c, build/%.o, $(SRCS))
 
-CFLAGS = -O2 -Wall -Wextra -Iinclude -Isrc -Isrc/runtime
+CFLAGS ?= -O2 -Wall -Wextra -Iinclude -Isrc -Isrc/runtime
 LIBS   = -lm
 
 ENGINE = $(OBJS)

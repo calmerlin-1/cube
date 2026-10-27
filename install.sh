@@ -50,13 +50,6 @@ cd "$(dirname "$0")"
 if [ "$DO_BUILD" = 1 ]; then
     echo "building..."
     make 2>&1 | tail -3
-    for d in flywheel/url flywheel/json flywheel/html flywheel/dom flywheel/css \
-             net/crisptls net/dns net/tcp net/http_client net/quic \
-             utils; do
-        if [ -f "$d/Makefile" ]; then
-            make -C "$d" 2>&1 | tail -1
-        fi
-    done
 fi
 
 echo "installing to prefix: $PREFIX"
@@ -65,6 +58,14 @@ mkdir -p "$BIN_DIR" "$INC_DIR" "$LIB_DIR"
 # binary
 cp cube "$BIN_DIR/"
 chmod 755 "$BIN_DIR/cube"
+
+# CA bundle — find_ca_bundle() looks for this at runtime
+SHARE_DIR="$DESTDIR$PREFIX/share/cube"
+mkdir -p "$SHARE_DIR"
+if [ -f data/cacert.pem ]; then
+    cp data/cacert.pem "$SHARE_DIR/"
+    echo "  CA bundle: $SHARE_DIR/cacert.pem"
+fi
 
 # headers - one subdirectory per library
 for d in flywheel/url flywheel/json flywheel/html flywheel/dom flywheel/css \

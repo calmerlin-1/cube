@@ -3,7 +3,7 @@ AR = llvm-ar
 
 SRCS = $(wildcard *.c)
 OBJS = $(patsubst %.c, build/%.o, $(SRCS))
-CFLAGS = -O2 -Wall -Wextra -I.
+CFLAGS ?= -O2 -Wall -Wextra -I.
 
 LIB = build/libutils.a
 

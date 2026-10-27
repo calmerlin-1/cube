@@ -16,7 +16,7 @@ OBJS_FULL = $(patsubst src/%.c, build/%.o, $(wildcard src/*.c)) \
 
 LIB = build/liburl.a
 
-CFLAGS = -O2 -Wall -Wextra -Iinclude -Isrc
+CFLAGS ?= -O2 -Wall -Wextra -Iinclude -Isrc
 
 
 

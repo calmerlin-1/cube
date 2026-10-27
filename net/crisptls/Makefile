@@ -38,7 +38,7 @@ DNS_LIB = ../dns/build/libdns.a
 UTILS_LIB = ../../utils/build/libutils.a
 DNS_INC = ../dns/include
 
-CFLAGS = -g -O2 -Wall -Wextra -I../.. \
+CFLAGS ?= -g -O1 -Wall -Wextra -I../.. \
          -Isrc/quic \
          -Iinclude \
          -Isrc/crypto \
