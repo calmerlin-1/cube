@@ -92,6 +92,11 @@ int ct_x25519(uint8_t shared[32], const uint8_t priv[32], const uint8_t peer[32]
 int ct_verify_rsa_pss_sha256(const uint8_t *pub_der, size_t pub_der_len,
                              const uint8_t *msg, size_t msg_len,
                              const uint8_t *sig, size_t sig_len);
+
+/** RSA PKCS#1 v1.5 SHA-256 verify (RFC 8017 §8.2.2). Native. */
+int ct_verify_rsa_pkcs1_sha256(const uint8_t *pub_der, size_t pub_der_len,
+                               const uint8_t *msg, size_t msg_len,
+                               const uint8_t *sig, size_t sig_len);
 int ct_verify_ecdsa_p256_sha256(const uint8_t *pub_der, size_t pub_der_len,
                                 const uint8_t *msg, size_t msg_len,
                                 const uint8_t *sig, size_t sig_len);

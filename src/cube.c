@@ -1356,6 +1356,7 @@ static const char *cube_repo_path(const char *rel, char *buf, size_t cap) {
 }
 int main(int argc, char **argv) {
     signal(SIGPIPE, SIG_IGN);
+    reuse_install_atexit();
 
     cube_opts_t o;
     memset(&o, 0, sizeof(o));

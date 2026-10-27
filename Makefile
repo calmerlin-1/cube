@@ -47,7 +47,21 @@ SUBDIRS = utils flywheel/json flywheel/css flywheel/url flywheel/html flywheel/d
 
 CUBE   = cube
 
-.PHONY: all clean libs info
+.PHONY: all clean libs info test integration-test help
+
+test:
+	@$(MAKE) -C tests test
+
+integration-test:
+	@$(MAKE) -C tests integration
+
+help:
+	@echo "cube build targets:"
+	@echo "  make              — build everything"
+	@echo "  make test         — run non-network tests"
+	@echo "  make integration-test — run network tests (slow)"
+	@echo "  make clean        — clean all build outputs"
+	@echo "  make info         — show compiler and flags"
 
 all: libs $(CUBE)
 

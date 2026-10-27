@@ -7,7 +7,8 @@
 CC      ?= cc
 CFLAGS  := -O2 -w -I../../net/crisptls/include \
            -I../../net/crisptls/src/crypto \
-           -I../../net/crisptls/src/proto/keyschedule
+           -I../../net/crisptls/src/proto/keyschedule \
+           -I../../net/dns/include
 LDADD   := ../../net/crisptls/build/libcrisptls.a \
            ../../net/dns/build/libdns.a \
            ../../utils/build/libutils.a \

@@ -50,3 +50,17 @@ tests/fuzz/artifacts/
 tests/fuzz/logs/
 *.c.new
 /fuzz-all.sh
+
+# Test artifacts
+tests/.results/
+tests/**/build/
+net/crisptls/build/test_*
+net/crisptls/build/tier_test
+net/crisptls/build/connect_test
+net/crisptls/build/quic_test
+net/crisptls/build/quic_packet_test
+net/crisptls/build/sha384_test
+net/crisptls/build/ssl3_rfc_test
+net/crisptls/build/tls_legacy_rfc_test
+net/crisptls/build/x25519_test
+tests/quic_probe

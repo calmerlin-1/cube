@@ -10,6 +10,7 @@
 /* OIDs for signature algorithms we recognise. */
 static const char OID_RSA_PSS_SHA256[] = "1.2.840.113549.1.1.10";  /* RSASSA-PSS */
 static const char OID_ECDSA_P256_SHA256[] = "1.2.840.10045.4.3.2";
+static const char OID_RSA_PKCS1_SHA256[] = "1.2.840.113549.1.1.11";
 #define T_SEQ  0x30
 #define T_SET  0x31
 #define T_INT  0x02
@@ -389,6 +390,11 @@ int ct_x509_verify_sig(const ct_x509_cert *c, const ct_x509_cert *issuer) {
     /* Verify functions expect full SPKI DER (not the extracted raw key
      * bits). parse_spki_p256 hard-checks the exact 91-byte P-256 SPKI
      * prefix; crypto_ec.c calls d2i_PUBKEY which also wants SPKI DER. */
+    if (strcmp(c->sigalg_oid, OID_RSA_PKCS1_SHA256) == 0) {
+        return ct_verify_rsa_pkcs1_sha256(issuer->spki_der, issuer->spki_len,
+                                          c->tbs_der, c->tbs_len,
+                                          c->sig, c->sig_len);
+    }
     if (strcmp(c->sigalg_oid, OID_RSA_PSS_SHA256) == 0) {
         return ct_verify_rsa_pss_sha256(issuer->spki_der, issuer->spki_len,
                                         c->tbs_der, c->tbs_len,
