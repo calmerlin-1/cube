@@ -19,7 +19,7 @@ CFLAGS  := -O2 -Wall -Wextra -g $(CRISPTLS_INC)
 LDADD   := $(ROOT)/net/crisptls/build/libcrisptls.a \
            $(ROOT)/net/dns/build/libdns.a \
            $(ROOT)/utils/build/libutils.a \
-           -lcrypto -lsodium -lssl
+          -lsodium
 
 .PHONY: all test integration clean help
 

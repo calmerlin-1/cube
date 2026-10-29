@@ -35,7 +35,7 @@ CFLAGS ?= -O2 -Wall -Wextra \
          -I$(CRISPTLS_SRC)/proto/extensions \
          -I$(CRISPTLS_SRC)/session \
          -I$(DNS_INC)
-LIBS   = -lcrypto -lsodium -lssl
+LIBS   = -lsodium
 
 .PHONY: all clean info
 

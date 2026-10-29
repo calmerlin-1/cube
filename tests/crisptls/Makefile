@@ -12,7 +12,7 @@ CFLAGS  := -O2 -w -I../../net/crisptls/include \
 LDADD   := ../../net/crisptls/build/libcrisptls.a \
            ../../net/dns/build/libdns.a \
            ../../utils/build/libutils.a \
-           -lcrypto -lsodium -lssl
+          -lsodium
 OUT     := ../../net/crisptls/build
 
 # RFC conformance tests (added this session)

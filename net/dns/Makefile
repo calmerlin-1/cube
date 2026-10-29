@@ -25,7 +25,7 @@ CFLAGS  = -O2 -Wall -Wextra \
           -I../crisptls/include
 LDFLAGS =
 CRISPTLS_LIB = ../crisptls/build/libcrisptls.a
-LIBS    = $(CRISPTLS_LIB) -lcrypto -lsodium -lssl
+LIBS    = $(CRISPTLS_LIB) -lsodium
 
 SRC_DIRS = src/api src/proto src/transport src/cache src/runtime
 SRCS     = $(foreach d, $(SRC_DIRS), $(wildcard $(d)/*.c))

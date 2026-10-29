@@ -49,6 +49,7 @@ CUBE   = cube
 
 .PHONY: all clean libs info test integration-test help
 
+
 all: libs $(CUBE)
 
 test:

@@ -1,0 +1,18 @@
+  all libs built
+cc -O1 -I. -Iutils -Wall -Wextra -Inet/crisptls/include -Inet/dns/include -Inet/tcp/include -Inet/http_client/include -Iflywheel/url/include -Iflywheel/json/include -Iflywheel/html/include -Iflywheel/dom/include -Iflywheel/css/include -Iutils src/cube.c \
+    net/http_client/build/libhttp_client.a \
+    net/crisptls/build/libcrisptls.a \
+    net/dns/build/libdns.a \
+    net/tcp/build/libtcp.a \
+    flywheel/url/build/liburl.a \
+            flywheel/html/build/libhtml.a \
+         flywheel/dom/build/libdom.a \
+         flywheel/css/build/libcss.a \
+            flywheel/json/build/libjson.a \
+    utils/build/libutils.a \
+    -lcrypto -lsodium -lssl -s -o cube
+src/cube.c:1315:12: warning: unused function 'is_ip_literal' [-Wunused-function]
+ 1315 | static int is_ip_literal(const char *host) {
+      |            ^~~~~~~~~~~~~
+1 warning generated.
+  cube built
