@@ -1,5 +1,6 @@
-/** crypto_libcrypto.c — libcrypto bindings. Primitives only. No SSL_*.
- * Alternative backend to crypto_sodium.c; pick one at link time. */
+/** crypto_libcrypto.c — random + constant-time compare.
+ * Despite the historical filename, this uses the OS RNG directly and has
+ * no libcrypto dependency. */
 
 #include "crypto.h"
 #include <string.h>

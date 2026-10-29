@@ -4,16 +4,16 @@ UNAME_S := $(shell uname -s 2>/dev/null || echo Windows)
 
 ifeq ($(UNAME_S),Darwin)
   CC     ?= cc
-AR     = llvm-ar
-RANLIB = llvm-ranlib
+AR ?= $(shell command -v ar 2>/dev/null || command -v llvm-ar 2>/dev/null || echo ar)
+RANLIB ?= $(shell command -v ranlib 2>/dev/null || command -v llvm-ranlib 2>/dev/null || echo ranlib)
 else ifeq ($(UNAME_S),Linux)
   CC     ?= cc
-AR     = llvm-ar
-RANLIB = llvm-ranlib
+AR ?= $(shell command -v ar 2>/dev/null || command -v llvm-ar 2>/dev/null || echo ar)
+RANLIB ?= $(shell command -v ranlib 2>/dev/null || command -v llvm-ranlib 2>/dev/null || echo ranlib)
 else
   CC     ?= aarch64-linux-android-clang
-AR     = llvm-ar
-RANLIB = llvm-ranlib
+AR ?= $(shell command -v ar 2>/dev/null || command -v llvm-ar 2>/dev/null || echo ar)
+RANLIB ?= $(shell command -v ranlib 2>/dev/null || command -v llvm-ranlib 2>/dev/null || echo ranlib)
 endif
 
 CFLAGS  = -O2 -Wall -Wextra \

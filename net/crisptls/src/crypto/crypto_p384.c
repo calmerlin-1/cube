@@ -25,29 +25,29 @@ static const uint64_t P384_P[6] = {
 };
 
 static const uint64_t P384_N[6] = {
-    0xEC196ACCC52973ull, 0x581A0DB248B0A77Aull,
+    0xECEC196ACCC52973ull, 0x581A0DB248B0A77Aull,
     0xC7634D81F4372DDFull, 0xFFFFFFFFFFFFFFFFull,
     0xFFFFFFFFFFFFFFFFull, 0xFFFFFFFFFFFFFFFFull
 };
 
 /* n - 2 (for Fermat inversion mod n) */
 static const uint64_t P384_NM2[6] = {
-    0xEC196ACCC52971ull, 0x581A0DB248B0A77Aull,
+    0xECEC196ACCC52971ull, 0x581A0DB248B0A77Aull,
     0xC7634D81F4372DDFull, 0xFFFFFFFFFFFFFFFFull,
     0xFFFFFFFFFFFFFFFFull, 0xFFFFFFFFFFFFFFFFull
 };
 
 /* Generator G */
 static const uint64_t P384_GX[6] = {
-    0x3B528BC929B2D6FBull, 0x1D31B81A86DC9A9Eull,
-    0x2C5A55A22D9E7A20ull, 0x3482BCED1CD9D1F8ull,
-    0xE5E2C0AA6A3B8BC5ull, 0xAA87CA22BE8B0537ull
+    0x3A545E3872760AB7ull, 0x5502F25DBF55296Cull,
+    0x59F741E082542A38ull, 0x6E1D3B628BA79B98ull,
+    0x8EB1C71EF320AD74ull, 0xAA87CA22BE8B0537ull
 };
 
 static const uint64_t P384_GY[6] = {
-    0x4A5C877B8A5C1B7Full, 0x6D9A5B2A03A5C78Full,
-    0xC4F6B6E4D6D33C13ull, 0x2C9C2C5D1A0A0E54ull,
-    0xA2F3C4F1CC8C4E5Dull, 0x3617DE4A96262C6Full
+    0x7A431D7C90EA0E5Full, 0x0A60B1CE1D7E819Dull,
+    0xE9DA3113B5F0B8C0ull, 0xF8F41DBD289A147Cull,
+    0x5D9E98BF9292DC29ull, 0x3617DE4A96262C6Full
 };
 
 /* ============================================================
@@ -219,16 +219,29 @@ static void barrett_reduce(bi384_t *r, const uint64_t x[12], const barrett_ctx_t
         borrow = (uint64_t)(d >> 64) & 1;
     }
 
-    /* Take low 6 limbs, then conditional subtract if >= mod */
-    bi384_t res;
-    memcpy(res.limb, diff, 6 * sizeof(uint64_t));
-
+    /* diff = x - q3*mod is a full 12-limb value, and q3 is an
+     * underestimate of floor(x/mod), so diff < ~4*mod.  Reduce it
+     * completely -- truncating to 6 limbs first would lose multiples
+     * of 2^384, which are not multiples of the modulus. */
     bi384_t mod_bi;
     memcpy(mod_bi.limb, ctx->mod, 6 * sizeof(uint64_t));
-    while (bi384_cmp(&res, &mod_bi) >= 0) {
-        bi384_sub(&res, &res, &mod_bi);
+    for (;;) {
+        int high = 0;
+        for (int i = 6; i < 12; i++) high |= (diff[i] != 0);
+        bi384_t low;
+        memcpy(low.limb, diff, 6 * sizeof(uint64_t));
+        if (!high && bi384_cmp(&low, &mod_bi) < 0) {
+            bi384_copy(r, &low);
+            return;
+        }
+        uint64_t borrow = 0;
+        for (int i = 0; i < 12; i++) {
+            uint64_t sub = (i < 6) ? ctx->mod[i] : 0;
+            unsigned __int128 d = (unsigned __int128)diff[i] - sub - borrow;
+            diff[i] = (uint64_t)d;
+            borrow = (uint64_t)(d >> 64) & 1;
+        }
     }
-    bi384_copy(r, &res);
 }
 
 /* ============================================================
@@ -317,7 +330,7 @@ static void fe_sqr(p384_fe *r, const p384_fe *a) { fe_mul(r, a, a); }
 /* r = a^(p-2) mod p — Fermat inversion via fast fe_mul. */
 static void fe_inv(p384_fe *r, const p384_fe *a) {
     static const uint64_t P_MINUS_2[6] = {
-        0x00000000FFFFFFFEull, 0xFFFFFFFF00000000ull,
+        0x00000000FFFFFFFDull, 0xFFFFFFFF00000000ull,
         0xFFFFFFFFFFFFFFFEull, 0xFFFFFFFFFFFFFFFFull,
         0xFFFFFFFFFFFFFFFFull, 0xFFFFFFFFFFFFFFFFull
     };
@@ -368,14 +381,15 @@ static void ge_double(p384_ge *r, const p384_ge *a) {
     fe_sqr(&F, &E);
     fe_add(&t1, &D, &D);
     fe_sub(&r->X, &F, &t1);
+    /* r may alias a: compute Z3 from the original Y before overwriting r->Y. */
+    fe_mul(&t1, &a->Y, &a->Z);
+    fe_add(&r->Z, &t1, &t1);
     fe_sub(&t1, &D, &r->X);
     fe_mul(&t1, &E, &t1);
     fe_add(&t2, &C, &C);
     fe_add(&t2, &t2, &t2);
     fe_add(&t2, &t2, &t2);
     fe_sub(&r->Y, &t1, &t2);
-    fe_mul(&t1, &a->Y, &a->Z);
-    fe_add(&r->Z, &t1, &t1);
 }
 
 /* Point addition (Jacobian). */

@@ -12,7 +12,7 @@ INC     := -I$(ROOT)/net/crisptls/include \
            -I$(ROOT)/utils
 
 CFLAGS  ?= -O2 -Wall -Wextra -g $(INC)
-LIBS    := $(LIB) -lcrypto -lsodium -lssl
+LIBS    := $(LIB) -lsodium
 
 TESTS   := test_fe test_hmac_native test_p256 test_sha_edge test_sha_native
 BINS    := $(addprefix $(BUILD)/,$(TESTS))

@@ -1,7 +1,23 @@
-#include <poll.h>
-#include <time.h>
-#include <sys/stat.h>
-#include <sys/time.h>
+#ifdef _WIN32
+    #define _WIN32_WINNT 0x0600
+    #define WIN32_LEAN_AND_MEAN
+    #include <winsock2.h>
+    #include <ws2tcpip.h>
+    #include <windows.h>
+    #include <io.h>
+    #include <time.h>
+    #include <sys/stat.h>
+    #include <sys/time.h>
+    typedef SSIZE_T ssize_t;
+    #define close _close
+    #define read  _read
+    #define write _write
+#else
+    #include <poll.h>
+    #include <time.h>
+    #include <sys/stat.h>
+    #include <sys/time.h>
+#endif
 /** cube.c — the cube orchestrator.
  *
  * Pipeline:
@@ -19,14 +35,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 #include <errno.h>
 #include <signal.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <netdb.h>
-#include <arpa/inet.h>
+#ifndef _WIN32
+    #include <unistd.h>
+    #include <sys/socket.h>
+    #include <netinet/in.h>
+    #include <netinet/tcp.h>
+    #include <netdb.h>
+    #include <arpa/inet.h>
+#endif
 
 #include "url_parser.h"
 #include "url_schemes.h"
@@ -45,6 +63,8 @@
 #include "json.h"
 #include <fcntl.h>
 #include <sys/time.h>
+
+static const char *g_argv0 = "cube";
 
 /* CLI options */
 typedef struct {
@@ -129,7 +149,11 @@ static void usage(const char *argv0) {
 "  -b, --body-only       print only the body (no headers)\n"
 "  --head N              print only the first N lines of the body\n"
 "  --color, --no-color   force / disable ANSI colors\n"
-"  --debug               library traces (TLS, HTTP/2) on stderr\n"
+"  --debug               verbose + library traces (TLS, HTTP/2) on stderr\n"
+"  --trace               debug + full byte-level tracing\n"
+"  --retries N           network/HTTP retry attempts (default 3)\n"
+"  --raw                 write body bytes as-is (no formatting/color)\n"
+"  --lines SPEC          select body lines: N, N-M, :N, -N:\n"
 "  -h, --help            this help\n"
 "\n", argv0);
 }
@@ -187,6 +211,51 @@ static int is_valid_dns_hostname(const char *host, size_t len) {
     }
     return 1;
 }
+static int ip_list_has(char ips[][64], size_t n, const char *ip) {
+    for (size_t i = 0; i < n; i++)
+        if (strcmp(ips[i], ip) == 0) return 1;
+    return 0;
+}
+
+/* Portable OS-resolver fallback. Used when the built-in resolver fails or
+ * yields only one address family (common on networks where one family is
+ * unreachable, or when an upstream silently drops a query). */
+static int resolve_host_system(const char *host, int want4, int want6,
+                               char ips[][64], int fams[], size_t max_n,
+                               size_t *n_out, int verbose) {
+    if (!want4 && !want6) return 0;
+    struct addrinfo hints, *res = NULL;
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family   = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    if (getaddrinfo(host, NULL, &hints, &res) != 0) return -1;
+
+    int added = 0;
+    for (int pass = 0; pass < 2; pass++) {
+        int want = (pass == 0) ? AF_INET : AF_INET6;
+        if ((want == AF_INET && !want4) || (want == AF_INET6 && !want6)) continue;
+        for (struct addrinfo *ai = res; ai; ai = ai->ai_next) {
+            if (ai->ai_family != want) continue;
+            char tmp[64];
+            const void *src = (want == AF_INET)
+                ? (const void *)&((struct sockaddr_in *)ai->ai_addr)->sin_addr
+                : (const void *)&((struct sockaddr_in6 *)ai->ai_addr)->sin6_addr;
+            if (!inet_ntop(want, src, tmp, sizeof tmp)) continue;
+            if (ip_list_has(ips, *n_out, tmp)) continue;
+            if (*n_out >= max_n) { freeaddrinfo(res); return added ? 0 : -1; }
+            snprintf(ips[*n_out], 64, "%.63s", tmp);
+            fams[*n_out] = want;
+            (*n_out)++;
+            added++;
+            if (verbose)
+                fprintf(stderr, "%s[dns]%s %s: system %s\n",
+                        col_cyan(), col_reset(), host, tmp);
+        }
+    }
+    freeaddrinfo(res);
+    return added ? 0 : -1;
+}
+
 static int g_dns_last_err = 0;
 static int resolve_host_all(const char *host, int fam_pref,
                             char ips[][64], int fams[], size_t max_n, size_t *n_out,
@@ -200,14 +269,14 @@ static int resolve_host_all(const char *host, int fam_pref,
         struct in_addr  a4;
         struct in6_addr a6;
         if (inet_pton(AF_INET, host, &a4) == 1) {
-            snprintf(ips[0], 64, "%s", host);
+            snprintf(ips[0], 64, "%.63s", host);
             fams[0] = AF_INET;
             *n_out = 1;
             if (verbose) fprintf(stderr, "%s[dns]%s %s: literal IPv4\n", col_cyan(), col_reset(), host);
             return 0;
         }
         if (inet_pton(AF_INET6, host, &a6) == 1) {
-            snprintf(ips[0], 64, "%s", host);
+            snprintf(ips[0], 64, "%.63s", host);
             fams[0] = AF_INET6;
             *n_out = 1;
             if (verbose) fprintf(stderr, "%s[dns]%s %s: literal IPv6\n", col_cyan(), col_reset(), host);
@@ -238,9 +307,14 @@ static int resolve_host_all(const char *host, int fam_pref,
     int rc = dns_resolve_dual(r, host, &ans);
     if (rc != DNS_OK) {
         if (verbose)
-            fprintf(stderr, "%s[dns]%s %s: %s\n", col_cyan(), col_reset(), host, dns_err_name(rc));
+            fprintf(stderr, "%s[dns]%s %s: %s (trying system resolver)\n",
+                    col_cyan(), col_reset(), host, dns_err_name(rc));
         dns_resolver_free(r);
         g_dns_last_err = rc;
+        int want4 = (fam_pref != AF_INET6);
+        int want6 = (fam_pref != AF_INET);
+        if (resolve_host_system(host, want4, want6, ips, fams, max_n, n_out, verbose) == 0 && *n_out > 0)
+            return 0;
         return -1;
     }
 
@@ -263,6 +337,35 @@ static int resolve_host_all(const char *host, int fam_pref,
         fams[*n_out] = AF_INET6;
         (*n_out)++;
         if (verbose) fprintf(stderr, "%s[dns]%s AAAA: %s\n", col_cyan(), col_reset(), ips[*n_out - 1]);
+    }
+
+    int has4 = 0, has6 = 0;
+    for (size_t i = 0; i < *n_out; i++) {
+        if (fams[i] == AF_INET) has4 = 1;
+        else if (fams[i] == AF_INET6) has6 = 1;
+    }
+    int want4 = (fam_pref != AF_INET6) && !has4;
+    int want6 = (fam_pref != AF_INET) && !has6;
+    if (want4 || want6) {
+        /* Supplements a dropped/blocked family. AI_ADDRCONFIG stops the
+         * system from returning IPv6 addresses on IPv4-only networks. */
+        resolve_host_system(host, want4, want6, ips, fams, max_n, n_out, verbose);
+    }
+
+    /* Stable IPv4-first ordering unless the caller asked for IPv6. */
+    if (fam_pref != AF_INET6) {
+        size_t w = 0;
+        for (int pass = 0; pass < 2; pass++) {
+            int want = (pass == 0) ? AF_INET : AF_INET6;
+            for (size_t i = w; i < *n_out; i++) {
+                if (fams[i] != want) continue;
+                char t[64]; memcpy(t, ips[i], sizeof t);
+                memcpy(ips[i], ips[w], sizeof t);
+                memcpy(ips[w], t, sizeof t);
+                int f = fams[i]; fams[i] = fams[w]; fams[w] = f;
+                w++;
+            }
+        }
     }
 
     dns_answer_free(&ans);
@@ -523,13 +626,20 @@ static int write_body(const http_response_t *r, const char *path,
     size_t blen_all = r->body_len;   /* HTML is capped after formatting, other types by raw lines */
     size_t blen = cube_cap_lines((const char *)r->body, blen_all, o->head_lines);
 
-    /* Color decision: force (--color) / never (--no-color) / auto (tty) */
-    int want_color = (o->color_mode != 2);  /* default on, --no-color disables */
+    /* Color decision: colors are on by default, but never contaminate a
+     * file written with -o and never when --raw/--no-color is used. */
+    int to_file = (path != NULL);
+    int want_color = !to_file && !o->raw && (o->color_mode != 2);
     const char *ct = http_headers_get((http_headers_t *)&r->headers, "Content-Type");
     int is_html = ct && strstr(ct, "html");
     int is_json = ct && strstr(ct, "json");
+    int is_css  = ct && strstr(ct, "css");
+    int is_xml  = ct && strstr(ct, "xml") && !is_html;
 
-    if (is_html && !o->raw) {
+    if (to_file || o->raw) {
+        fwrite(r->body, 1, blen, fp);
+    }
+    else if (is_html) {
         if (o->debug_styles) debug_styles_dump((const char *)r->body, blen_all);
         /* Format HTML into a temp file, cap to --head N lines of the FORMATTED text,
          * then colorize only if want_color. Raw fallback if formatting fails. */
@@ -559,10 +669,22 @@ static int write_body(const http_response_t *r, const char *path,
         }
     }
     else if (want_color && is_json) json_colorize((const char *)r->body, blen, fp);
+    else if (want_color && is_css)  css_colorize((const char *)r->body, blen, fp);
+    else if (want_color && is_xml)  html_colorize((const char *)r->body, blen, fp);
     else                            fwrite(r->body, 1, blen, fp);
 
     if (path) fclose(fp);
     return 0;
+}
+
+static void apply_runtime_opts(const cube_opts_t *o) {
+    int dbg = o->debug || o->trace;
+    crisptls_set_trace(o->trace ? 1 : 0);
+    http_client_set_trace(dbg ? 1 : 0);
+    crisptls_set_color(o->color_mode != 2);
+    crisptls_set_quiet((o->quiet || o->no_warnings || !dbg) ? 1 : 0);
+    if (o->color_mode == 2) col_disable();
+    else                    col_force(1);
 }
 
 /* Main */
@@ -842,12 +964,25 @@ static void reuse_install_atexit(void) {
     }
 }
 
+static long cube_now_ms(void) {
+#ifdef _WIN32
+    return (long)GetTickCount64();
+#else
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (long)ts.tv_sec * 1000L + (long)(ts.tv_nsec / 1000000L);
+#endif
+}
+
 static int reuse_is_alive(int fd) {
     if (fd < 0) return 0;
+#ifdef _WIN32
+    WSAPOLLFD pfd = { .fd = (SOCKET)fd, .events = POLLRDNORM, .revents = 0 };
+    return WSAPoll(&pfd, 1, 0) == 0;
+#else
     struct pollfd pfd = { .fd = fd, .events = POLLIN, .revents = 0 };
-    int r = poll(&pfd, 1, 0);
-    if (r == 0) return 1;
-    return 0;
+    return poll(&pfd, 1, 0) == 0;
+#endif
 }
 
 static int reuse_lookup(const char *host, uint16_t port, int is_tls,
@@ -938,8 +1073,9 @@ static int fetch_response(const cube_opts_t *o, const char *url,
     url_err ue = url_parse_auto(url, strlen(url),
                                  norm_buf, norm_buf_size, &norm_len, &urlv);
     if (ue != URL_OK) {
-        fprintf(stderr, "%s[!] url: %s (code %d)%s\n",
-                col_red(), url_err_name(ue), (int)ue, col_reset());
+        if (!o->quiet)
+            fprintf(stderr, "%s[!] url: %s (code %d)%s\n",
+                    col_red(), url_err_name(ue), (int)ue, col_reset());
         if (o->verbose) {
             fprintf(stderr, "    input: \"%s\"\n", url);
             fprintf(stderr, "    parser: url_parse_auto (strict-then-whatwg)\n");
@@ -949,8 +1085,9 @@ static int fetch_response(const cube_opts_t *o, const char *url,
     }
     url_err ve = url_validate(&urlv);
     if (ve != URL_OK) {
-        fprintf(stderr, "%s[!] url: %s (code %d)%s\n",
-                col_red(), url_err_name(ve), (int)ve, col_reset());
+        if (!o->quiet)
+            fprintf(stderr, "%s[!] url: %s (code %d)%s\n",
+                    col_red(), url_err_name(ve), (int)ve, col_reset());
         if (o->verbose) {
             fprintf(stderr, "    input: \"%s\"\n", url);
             fprintf(stderr, "    validator: url_validate\n");
@@ -959,7 +1096,10 @@ static int fetch_response(const cube_opts_t *o, const char *url,
     }
 
     char host[256];
-    if (urlv.host_len >= sizeof(host)) { fprintf(stderr, "%shost too long%s\n", col_red(), col_reset()); return 2; }
+    if (urlv.host_len >= sizeof(host)) {
+        if (!o->quiet) fprintf(stderr, "%shost too long%s\n", col_red(), col_reset());
+        return 2;
+    }
     memcpy(host, urlv.host, urlv.host_len);
     host[urlv.host_len] = 0;
 
@@ -1000,13 +1140,14 @@ static int fetch_response(const cube_opts_t *o, const char *url,
     if (fd < 0) {
         /* ---- 2. DNS ---- */
         if (o->verbose) fprintf(stderr, "%s[dns]%s resolving %s ...\n", col_cyan(), col_reset(), host);
-        char ips[8][64];
-        int  fams[8];
+        char ips[16][64];
+        int  fams[16];
         size_t n_ips = 0;
         int  fam_pref = o->ipv4_only ? AF_INET : (o->ipv6_only ? AF_INET6 : AF_UNSPEC);
-        if (resolve_host_all(host, fam_pref, ips, fams, 8, &n_ips, o->debug) != 0 || n_ips == 0) {
-            fprintf(stderr, "%s[!] dns: %s for '%s'%s\n",
-                    col_red(), dns_err_name(g_dns_last_err), host, col_reset());
+        if (resolve_host_all(host, fam_pref, ips, fams, 16, &n_ips, o->debug) != 0 || n_ips == 0) {
+            if (!o->quiet)
+                fprintf(stderr, "%s[!] dns: %s for '%s'%s\n",
+                        col_red(), dns_err_name(g_dns_last_err), host, col_reset());
             if (o->verbose) fprintf(stderr, "    (dns error code %d)\n", g_dns_last_err);
             return 3;
         }
@@ -1025,20 +1166,19 @@ static int fetch_response(const cube_opts_t *o, const char *url,
                 fprintf(stderr, "%s[dns]%s retrying %s (attempt %zu/%zu)\n", col_cyan(), col_reset(), ips[_i], _i + 1, n_ips);
             if (o->verbose)
                 fprintf(stderr, "%s[tcp]%s connecting %s:%u\n", col_green(), col_reset(), ips[_i], (unsigned)port);
-            struct timespec _tc0, _tc1;
-            clock_gettime(CLOCK_MONOTONIC, &_tc0);
+            long _t0 = cube_now_ms();
             fd = tcp_connect(ips[_i], fams[_i], (uint16_t)port, per_attempt, tcp_err, sizeof tcp_err);
             if (fd >= 0) {
-                clock_gettime(CLOCK_MONOTONIC, &_tc1);
-                long _ms = (_tc1.tv_sec - _tc0.tv_sec) * 1000 + (_tc1.tv_nsec - _tc0.tv_nsec) / 1000000;
+                long _ms = cube_now_ms() - _t0;
                 if (o->verbose)
                     fprintf(stderr, "%s[tcp]%s connected in %ldms\n", col_green(), col_reset(), _ms);
                 break;
             }
         }
         if (fd < 0) {
-            fprintf(stderr, "%s[!] tcp connect failed: %s%s\n",
-                    col_red(),
+            if (!o->quiet)
+                fprintf(stderr, "%s[!] tcp connect failed: %s%s\n",
+                        col_red(),
                     tcp_err[0] ? tcp_err : strerror(errno),
                     col_reset());
             return 4;
@@ -1062,8 +1202,9 @@ static int fetch_response(const cube_opts_t *o, const char *url,
             crisptls_policy_t pol;
             if (o->profile) {
                 if (crisptls_policy_from_profile(&pol, o->profile) != CRISPTLS_OK) {
-                    fprintf(stderr, "%s[!] unknown TLS profile: %s%s\n",
-                            col_red(), o->profile, col_reset());
+                    if (!o->quiet)
+                        fprintf(stderr, "%s[!] unknown TLS profile: %s%s\n",
+                                col_red(), o->profile, col_reset());
                     close(fd);
                     return 5;
                 }
@@ -1081,8 +1222,9 @@ static int fetch_response(const cube_opts_t *o, const char *url,
             if (o->verbose) fprintf(stderr, "%s[tls]%s handshake starting\n", col_yellow(), col_reset());
             tls = crisptls_connect(tls_ctx, fd, host);
             if (!tls) {
-                fprintf(stderr, "%s[!] tls handshake failed: %s%s\n",
-                        col_red(),
+                if (!o->quiet)
+                    fprintf(stderr, "%s[!] tls handshake failed: %s%s\n",
+                            col_red(),
                         crisptls_last_error() ? crisptls_last_error() : "(no detail)",
                         col_reset());
                 crisptls_ctx_free(tls_ctx);
@@ -1146,7 +1288,8 @@ static int fetch_response(const cube_opts_t *o, const char *url,
     http_headers_free(&req.headers);
 
     if (rc != 0) {
-        fprintf(stderr, "%s[!] http failed: rc=%d%s\n", col_red(), rc, col_reset());
+        if (!o->quiet)
+            fprintf(stderr, "%s[!] http failed: rc=%d%s\n", col_red(), rc, col_reset());
         /* Don't close fd/tls — cache owns them if reuse is on */
         return 7;
     }
@@ -1182,8 +1325,9 @@ static void print_response(const cube_opts_t *o, const http_response_t *resp,
         if (crc == CRISPTLS_OK) {
             fprintf(stderr, "%s[tls]%s leaf cert: %zu bytes\n", col_yellow(), col_reset(), der_len);
         } else {
-            fprintf(stderr, "%s[!] --show-cert: no peer certificate (rc=%d)%s\n",
-                    col_red(), crc, col_reset());
+            if (!o->quiet)
+                fprintf(stderr, "%s[!] --show-cert: no peer certificate (rc=%d)%s\n",
+                        col_red(), crc, col_reset());
         }
         for (int ci = 0; ci < 16; ci++) {
             size_t cl = 0;
@@ -1216,18 +1360,13 @@ static void print_response(const cube_opts_t *o, const http_response_t *resp,
 static int run_one(const cube_opts_t *o_in,
                    const char **extra_headers, int n_extra) {
     cube_opts_t o = *o_in;
+#ifdef SIGPIPE
     signal(SIGPIPE, SIG_IGN);
+#endif
 
-    if (o.debug) {
-        crisptls_set_trace(o.trace ? 1 : 0);
-        http_client_set_trace(1);
-    }
-    crisptls_set_color(o.color_mode != 2);
-    crisptls_set_quiet(!(o.debug || o.trace));
-    switch (o.color_mode) {
-        case 2: col_disable(); break;
-        default: col_force(1); break;
-    }
+    if (o.trace) { o.debug = 1; o.verbose = 1; }
+    if (o.debug) o.verbose = 1;
+    apply_runtime_opts(&o);
     { char _sp[1024]; url_schemes_load(cube_repo_path("flywheel/url/data/scheme_ports.conf", _sp, sizeof _sp)); }
 
     char url_buf[2048];
@@ -1311,20 +1450,6 @@ static const char *normalize_url(const char *in) {
     return buf;
 }
 
-/* Is `host` a literal IPv4 or IPv6 address (no DNS needed)? */
-static int is_ip_literal(const char *host) {
-    if (!host) return 0;
-    /* IPv6 with brackets */
-    if (host[0] == '[') return 1;
-    /* IPv4: at least 3 dots, all digits */
-    int dots = 0, digits = 0;
-    for (const char *p = host; *p; p++) {
-        if (*p == '.') { dots++; if (digits == 0) return 0; digits = 0; }
-        else if (*p >= '0' && *p <= '9') digits++;
-        else return 0;
-    }
-    return dots == 3 && digits > 0;
-}
 
 /* Resolve a path relative to the cube repo root. Falls back to CWD-relative. */
 static const char *cube_repo_path(const char *rel, char *buf, size_t cap) {
@@ -1332,22 +1457,23 @@ static const char *cube_repo_path(const char *rel, char *buf, size_t cap) {
     FILE *f = fopen(rel, "r");
     if (f) { fclose(f); snprintf(buf, cap, "%s", rel); return buf; }
 
-    /* Walk up from /proc/self/exe */
+    /* Walk up from the executable path (portable: argv[0], no /proc). */
     char exe[1024];
-    ssize_t n = readlink("/proc/self/exe", exe, sizeof exe - 1);
-    if (n > 0) {
-        exe[n] = 0;
-        for (int depth = 0; depth < 6; depth++) {
-            char *slash = strrchr(exe, '/');
-            if (!slash) break;
-            *slash = 0;
-            snprintf(buf, cap, "%s/%s", exe, rel);
-            f = fopen(buf, "r");
-            if (f) { fclose(f); return buf; }
-            snprintf(buf, cap, "%s/../%s", exe, rel);
-            f = fopen(buf, "r");
-            if (f) { fclose(f); return buf; }
-        }
+    snprintf(exe, sizeof exe, "%s", g_argv0 ? g_argv0 : "");
+    for (int depth = 0; depth < 6; depth++) {
+        char *slash = strrchr(exe, '/');
+#ifdef _WIN32
+        char *bslash = strrchr(exe, '\\');
+        if (!slash || (bslash && bslash > slash)) slash = bslash;
+#endif
+        if (!slash) break;
+        *slash = 0;
+        snprintf(buf, cap, "%s/%s", exe, rel);
+        f = fopen(buf, "r");
+        if (f) { fclose(f); return buf; }
+        snprintf(buf, cap, "%s/../%s", exe, rel);
+        f = fopen(buf, "r");
+        if (f) { fclose(f); return buf; }
     }
 
     /* Give up — return the relative path (caller will handle fopen failure) */
@@ -1355,7 +1481,14 @@ static const char *cube_repo_path(const char *rel, char *buf, size_t cap) {
     return buf;
 }
 int main(int argc, char **argv) {
+    g_argv0 = argc > 0 ? argv[0] : "cube";
+#ifdef _WIN32
+    WSADATA wsa;
+    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) return 1;
+#endif
+#ifdef SIGPIPE
     signal(SIGPIPE, SIG_IGN);
+#endif
     reuse_install_atexit();
 
     cube_opts_t o;
@@ -1370,17 +1503,9 @@ int main(int argc, char **argv) {
 
     if (parse_args(argc, argv, &o, extra_headers, &n_extra) != 0) return 1;
 
-    if (o.debug) {
-        crisptls_set_trace(o.trace ? 1 : 0);
-        http_client_set_trace(1);
-    }
-    crisptls_set_color(o.color_mode != 2);
-    crisptls_set_quiet(o.quiet || o.no_warnings);
-
-    switch (o.color_mode) {
-        case 2: col_disable(); break;
-        default: col_force(1); break;
-    }
+    if (o.trace) { o.debug = 1; o.verbose = 1; }
+    if (o.debug) o.verbose = 1;
+    apply_runtime_opts(&o);
     { char _sp[1024]; url_schemes_load(cube_repo_path("flywheel/url/data/scheme_ports.conf", _sp, sizeof _sp)); }
 
     if (o.n_urls == 0) {
@@ -1408,8 +1533,10 @@ int main(int argc, char **argv) {
                 fprintf(stderr, "%s[http]%s retry %d/%d\n", col_magenta(), col_reset(), a, o.retries);
             rc = run_one(&o, extra_headers, n_extra);
             if (rc == 0) break;
-            /* Retry network-layer failures only: 3=DNS, 4=TCP, 5=TLS, 7=HTTP */
-            if (rc != 3 && rc != 4 && rc != 5 && rc != 7) break;
+            /* Retry only transient HTTP-layer failures. DNS/TCP/TLS
+             * failures (3/4/5) are usually deterministic; retrying them
+             * just multiplies timeouts. */
+            if (rc != 7) break;
         }
         fflush(stdout);
         fflush(stderr);

@@ -1,6 +1,6 @@
 /** crypto_legacy.h — hash/HMAC/CBC primitives for TLS <= 1.2 (MD5, SHA-1,
- *  AES-CBC, 3DES-CBC). Backed by libcrypto EVP. Kept out of crypto.h so the
- *  modern libsodium path stays untouched. */
+ *  AES-CBC, 3DES-CBC). Native implementations, zero OpenSSL. Kept out of
+ *  crypto.h so the modern path stays untouched. */
 #ifndef CRISPTLS_CRYPTO_LEGACY_H
 #define CRISPTLS_CRYPTO_LEGACY_H
 

@@ -2,8 +2,8 @@
 # by linking crisptls + dns + tcp + http_client + url + utils.
 
 CC     ?= cc
-AR     = llvm-ar
-RANLIB = llvm-ranlib
+AR ?= $(shell command -v ar 2>/dev/null || command -v llvm-ar 2>/dev/null || echo ar)
+RANLIB ?= $(shell command -v ranlib 2>/dev/null || command -v llvm-ranlib 2>/dev/null || echo ranlib)
 
 # Library paths (each module has its own Makefile + build/lib*.a)
 CRISPTLS_LIB   = net/crisptls/build/libcrisptls.a
@@ -39,7 +39,7 @@ CFLAGS = -O1 -I. -Iutils -Wall -Wextra \
 	         -I$(CSS_INC) \
          -I$(UTILS_INC)
 
-LIBS   = -lcrypto -lsodium -lssl
+LIBS   = -lsodium
 
 # Every subdir with a Makefile. Order matters for cross-subdir deps.
 SUBDIRS = utils flywheel/json flywheel/css flywheel/url flywheel/html flywheel/dom \

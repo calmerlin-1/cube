@@ -460,7 +460,9 @@ url_err url_parse_with_scheme(const char *s, size_t len,
 
 /* Append src to out+*n, bounded by cap. 0 on success. */
 static int append(char *out, size_t cap, size_t *n, const char *src, size_t slen) {
-    if (*n + slen > cap) return -1;
+    if (slen == 0) return 0;
+    if (!src) return -1;
+    if (*n > cap || slen > cap - *n) return -1;
     memcpy(out + *n, src, slen);
     *n += slen;
     return 0;
@@ -478,7 +480,9 @@ static int append_u16(char *out, size_t cap, size_t *n, uint16_t v) {
 
 /* Append slice lowercased. */
 static int append_lower(char *out, size_t cap, size_t *n, const char *src, size_t slen) {
-    if (*n + slen > cap) return -1;
+    if (slen == 0) return 0;
+    if (!src) return -1;
+    if (*n > cap || slen > cap - *n) return -1;
     for (size_t i = 0; i < slen; i++) out[*n + i] = (char)to_lower((unsigned char)src[i]);
     *n += slen;
     return 0;

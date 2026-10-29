@@ -16,5 +16,5 @@ clean:
 policy_test: policy_test.c
 	$(CC) $(CFLAGS) -I../include policy_test.c \
 		../build/libcrisptls.a ../../dns/build/libdns.a ../../../utils/build/libutils.a \
-		-lcrypto -lsodium -lssl -o $@
+		-lsodium -o $@
 	@echo "  policy_test built"

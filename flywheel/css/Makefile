@@ -1,7 +1,7 @@
 # Makefile — flywheel/css
 
 CC ?= $(shell command -v cc 2>/dev/null || command -v gcc 2>/dev/null || echo aarch64-linux-android-clang)
-AR = llvm-ar
+AR ?= $(shell command -v ar 2>/dev/null || command -v llvm-ar 2>/dev/null || echo ar)
 # Prefer llvm-ar (Termux) if GNU ar isn't actually functional
 
 SRC_DIRS = src/api src/tokenizer src/parser src/match src/runtime

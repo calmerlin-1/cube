@@ -97,6 +97,12 @@ int ct_verify_rsa_pss_sha256(const uint8_t *pub_der, size_t pub_der_len,
 int ct_verify_rsa_pkcs1_sha256(const uint8_t *pub_der, size_t pub_der_len,
                                const uint8_t *msg, size_t msg_len,
                                const uint8_t *sig, size_t sig_len);
+int ct_verify_rsa_pkcs1_sha384(const uint8_t *pub_der, size_t pub_der_len,
+                               const uint8_t *msg, size_t msg_len,
+                               const uint8_t *sig, size_t sig_len);
+int ct_verify_rsa_pkcs1_sha512(const uint8_t *pub_der, size_t pub_der_len,
+                               const uint8_t *msg, size_t msg_len,
+                               const uint8_t *sig, size_t sig_len);
 int ct_verify_ecdsa_p256_sha256(const uint8_t *pub_der, size_t pub_der_len,
                                 const uint8_t *msg, size_t msg_len,
                                 const uint8_t *sig, size_t sig_len);

@@ -1,9 +1,11 @@
-/** crypto_rsa.c — native RSA PKCS#1 v1.5 SHA-256 verify.
+/** crypto_rsa.c — native RSA PKCS#1 v1.5 and RSA-PSS SHA-256 verify.
  *
- * Reference: RFC 8017 §8.2.2 (RSASSA-PKCS1-v1_5 verify).
- * Structural reference: Cinnabar (Pascal Levy, MIT) — verify-then-compare.
+ * References:
+ *   RFC 8017 §8.2.2  (RSASSA-PKCS1-v1_5 verify)
+ *   RFC 8017 §8.1.2  (RSASSA-PSS verify)
+ *   RFC 8017 §9.1.2  (EMSA-PSS encoding, MGF1)
  *
- * Approach: build the EXPECTED padded message (00 01 FF.. 00 DigestInfo H),
+ * PKCS#1 v1.5: build the EXPECTED padded message (00 01 FF.. 00 DigestInfo H),
  * compute s^e mod n, compare byte-by-byte. Simpler and faster than unpad-
  * then-hash. Constant-time by construction (no early returns).
  *
@@ -18,6 +20,8 @@
 #define RSA_MAX_LIMBS  64          /* 4096 bits */
 #define RSA_MAX_BYTES  (RSA_MAX_LIMBS * 8)
 #define SHA256_LEN     32
+#define SHA384_LEN     48
+#define SHA512_LEN     64
 
 /* DigestInfo prefix for SHA-256 — 19 bytes.
  * Actual DigestInfo on wire: 19-byte prefix || 32-byte hash = 51 bytes.
@@ -27,6 +31,16 @@ static const uint8_t DIGEST_INFO_SHA256[19] = {
     0x30, 0x31, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86,
     0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x01, 0x05,
     0x00, 0x04, 0x20
+};
+static const uint8_t DIGEST_INFO_SHA384[19] = {
+    0x30, 0x41, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86,
+    0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x02, 0x05,
+    0x00, 0x04, 0x30
+};
+static const uint8_t DIGEST_INFO_SHA512[19] = {
+    0x30, 0x51, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86,
+    0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x03, 0x05,
+    0x00, 0x04, 0x40
 };
 
 /* ============================================================
@@ -132,42 +146,25 @@ static int bi_mulwide(uint64_t *r, size_t r_len, const bi_t *a, const bi_t *b) {
 }
 
 /* ============================================================
- * Barrett reduction (per modulus), from Cinnabar's structure.
- * ============================================================ */
+ * Modular reduction
+ * ============================================================
+ * Full-width binary long division: shift the remainder one bit at a
+ * time, conditionally subtracting the modulus.  This handles moduli of
+ * any size up to RSA_MAX_LIMBS without the fixed-size overflow and
+ * high-limb truncation that the previous Barrett table implementation
+ * had for 3072/4096-bit keys.
+ */
 
-typedef struct {
-    bi_t mod;
-    bi_t factor;      /* floor(b^(2k) / mod), where b = 2^64, k = mod.limb count */
-    size_t k;         /* modulus limb count */
-    size_t k_bits;    /* modulus bit length */
-} barrett_ctx_t;
-
-static void barrett_init(barrett_ctx_t *ctx, const bi_t *mod) {
-    bi_copy(&ctx->mod, mod);
-    ctx->k = mod->n;
-
-    /* k_bits = bit length of mod */
-    size_t kb = (mod->n - 1) * 64;
-    uint64_t top = mod->limb[mod->n - 1];
-    while (top) { kb++; top >>= 1; }
-    ctx->k_bits = kb;
-
-    /* factor = floor(2^(2 * k_bits) / mod).
-     * Use long division: dividend = 2^(2k) (bit 2k_bits set), divisor = mod. */
-    size_t div_bits = 2 * kb + 1;
-    size_t div_limbs = (div_bits + 63) / 64;
-
-    uint64_t dividend[128] = {0};   /* max 2*4096+1 bits = 8193 bits = 129 limbs */
-    if (div_limbs > 128) { memset(&ctx->factor, 0, sizeof ctx->factor); return; }
-    dividend[2 * kb / 64] = (uint64_t)1 << (2 * kb % 64);
-
-    uint64_t rem[128] = {0};
+static void bi_mod_reduce(bi_t *r, const uint64_t *x, size_t x_limbs,
+                          const bi_t *mod)
+{
+    uint64_t rem[RSA_MAX_LIMBS + 2] = {0};
     size_t rem_n = 0;
-    uint64_t quotient[128] = {0};
 
-    for (int bit = (int)(2 * kb); bit >= 0; bit--) {
-        /* rem = (rem << 1) | dividend[bit] */
-        uint64_t carry = (dividend[bit / 64] >> (bit % 64)) & 1;
+    if (mod->n == 0) { bi_zero(r); return; }
+
+    for (size_t bit = x_limbs * 64; bit-- > 0; ) {
+        uint64_t carry = (x[bit >> 6] >> (bit & 63)) & 1;
         for (size_t j = 0; j < rem_n; j++) {
             uint64_t nv = (rem[j] << 1) | carry;
             carry = rem[j] >> 63;
@@ -175,101 +172,44 @@ static void barrett_init(barrett_ctx_t *ctx, const bi_t *mod) {
         }
         if (carry) rem[rem_n++] = carry;
 
-        /* if rem >= mod: rem -= mod; set quotient bit */
         int cmp;
         if (rem_n > mod->n) cmp = 1;
         else if (rem_n < mod->n) cmp = -1;
         else {
             cmp = 0;
-            for (int i = (int)mod->n - 1; i >= 0; i--) {
+            for (size_t i = mod->n; i-- > 0; ) {
                 if (rem[i] > mod->limb[i]) { cmp = 1; break; }
                 if (rem[i] < mod->limb[i]) { cmp = -1; break; }
             }
         }
         if (cmp >= 0) {
-            uint64_t b = 0;
-            for (size_t j = 0; j < mod->n; j++) {
-                unsigned __int128 d = (unsigned __int128)rem[j] - mod->limb[j] - b;
+            uint64_t borrow = 0;
+            for (size_t j = 0; j < rem_n; j++) {
+                uint64_t y = j < mod->n ? mod->limb[j] : 0;
+                unsigned __int128 d = (unsigned __int128)rem[j] - y - borrow;
                 rem[j] = (uint64_t)d;
-                b = (uint64_t)(d >> 64) & 1;
+                borrow = (uint64_t)(d >> 64) & 1;
             }
-            if (rem_n > mod->n) {
-                rem[mod->n] -= b;
-                if (rem[mod->n] == 0 && rem_n > mod->n) rem_n = mod->n;
-            }
-            quotient[bit / 64] |= (uint64_t)1 << (bit % 64);
+            while (rem_n > 0 && rem[rem_n - 1] == 0) rem_n--;
         }
     }
 
-    /* Store factor (may be up to k+1 limbs) */
-    bi_zero(&ctx->factor);
-    for (size_t i = 0; i < div_limbs && i < RSA_MAX_LIMBS; i++)
-        ctx->factor.limb[i] = quotient[i];
-    ctx->factor.n = div_limbs;
-    bi_clamp(&ctx->factor);
-}
-
-static void barrett_reduce(bi_t *r, const uint64_t *x, size_t x_limbs, const barrett_ctx_t *ctx) {
-    /* Barrett: q1 = x >> (k-1)*64 */
-    size_t shift_limbs = ctx->k - 1;
-    bi_t q1;
-    bi_zero(&q1);
-    if (x_limbs > shift_limbs) {
-        q1.n = x_limbs - shift_limbs;
-        for (size_t i = 0; i < q1.n; i++) q1.limb[i] = x[shift_limbs + i];
-        bi_clamp(&q1);
-    }
-
-    /* q2 = q1 * factor */
-    uint64_t q2[256] = {0};
-    bi_mulwide(q2, 256, &q1, &ctx->factor);
-    size_t q2_n = q1.n + ctx->factor.n;
-
-    /* q3 = q2 >> (k+1)*64 */
-    size_t shift2 = ctx->k + 1;
-    bi_t q3;
-    bi_zero(&q3);
-    if (q2_n > shift2) {
-        q3.n = q2_n - shift2;
-        for (size_t i = 0; i < q3.n; i++) q3.limb[i] = q2[shift2 + i];
-        bi_clamp(&q3);
-    }
-
-    /* r2 = q3 * mod */
-    uint64_t r2[256] = {0};
-    bi_mulwide(r2, 256, &q3, &ctx->mod);
-    size_t r2_n = q3.n + ctx->mod.n;
-
-    /* r = x - r2 (mod 2^(x_limbs * 64)) */
-    uint64_t diff[256] = {0};
-    uint64_t borrow = 0;
-    for (size_t i = 0; i < x_limbs; i++) {
-        uint64_t y = i < r2_n ? r2[i] : 0;
-        unsigned __int128 d = (unsigned __int128)x[i] - y - borrow;
-        diff[i] = (uint64_t)d;
-        borrow = (uint64_t)(d >> 64) & 1;
-    }
-
-    /* Take low k limbs, subtract mod while >= mod */
     bi_zero(r);
-    r->n = ctx->k;
-    for (size_t i = 0; i < ctx->k && i < x_limbs; i++) r->limb[i] = diff[i];
+    r->n = rem_n;
+    memcpy(r->limb, rem, rem_n * sizeof(uint64_t));
     bi_clamp(r);
-
-    while (bi_cmp(r, &ctx->mod) >= 0) bi_sub(r, r, &ctx->mod);
 }
 
-static void bi_mulmod(bi_t *r, const bi_t *a, const bi_t *b, const barrett_ctx_t *ctx) {
-    uint64_t wide[256] = {0};
-    bi_mulwide(wide, 256, a, b);
-    barrett_reduce(r, wide, a->n + b->n, ctx);
+static void bi_mulmod(bi_t *r, const bi_t *a, const bi_t *b, const bi_t *mod) {
+    uint64_t wide[2 * RSA_MAX_LIMBS + 4] = {0};
+    const size_t wide_len = sizeof wide / sizeof wide[0];
+    if (a->n + b->n > wide_len) { bi_zero(r); return; }
+    bi_mulwide(wide, wide_len, a, b);
+    bi_mod_reduce(r, wide, a->n + b->n, mod);
 }
 
 /* modexp: r = a^e mod m. */
 static void bi_modexp(bi_t *r, const bi_t *a, const bi_t *e, const bi_t *m) {
-    barrett_ctx_t ctx;
-    barrett_init(&ctx, m);
-
     bi_t base;
     /* base = a mod m (a < m for RSA sig, so just copy) */
     if (bi_cmp(a, m) < 0) bi_copy(&base, a);
@@ -283,9 +223,9 @@ static void bi_modexp(bi_t *r, const bi_t *a, const bi_t *e, const bi_t *m) {
     for (size_t i = 0; i < e->n; i++) {
         uint64_t w = e->limb[i];
         for (int bit = 0; bit < 64; bit++) {
-            if (w & 1) bi_mulmod(&result, &result, &base, &ctx);
+            if (w & 1) bi_mulmod(&result, &result, &base, m);
             if (i == e->n - 1 && (w >> 1) == 0) goto done;
-            bi_mulmod(&base, &base, &base, &ctx);
+            bi_mulmod(&base, &base, &base, m);
             w >>= 1;
         }
     }
@@ -350,9 +290,13 @@ static int parse_spki_rsa(const uint8_t *pub_der, size_t pub_der_len, bi_t *n, b
  * PKCS#1 v1.5 verify — build expected EM, compare byte-by-byte.
  * ============================================================ */
 
-int ct_verify_rsa_pkcs1_sha256(const uint8_t *pub_der, size_t pub_der_len,
-                               const uint8_t *msg, size_t msg_len,
-                               const uint8_t *sig, size_t sig_len)
+typedef int (*ct_hash_fn)(const uint8_t *, size_t, uint8_t *);
+
+static int rsa_pkcs1_verify_hash(const uint8_t *pub_der, size_t pub_der_len,
+                                 const uint8_t *msg, size_t msg_len,
+                                 const uint8_t *sig, size_t sig_len,
+                                 const uint8_t *digest_info, size_t digest_info_len,
+                                 size_t hash_len, ct_hash_fn hash_fn)
 {
     if (!pub_der || !sig || sig_len == 0) return CT_ERR_ARGS;
     if (!msg && msg_len > 0) return CT_ERR_ARGS;
@@ -363,7 +307,7 @@ int ct_verify_rsa_pkcs1_sha256(const uint8_t *pub_der, size_t pub_der_len,
 
     size_t k = bi_byte_len(&n);
     if (k != sig_len) return CT_ERR_VERIFY;
-    if (k < SHA256_LEN + 19 + 2 + 8) return CT_ERR_VERIFY;   /* RFC 8017 min */
+    if (k < digest_info_len + hash_len + 11) return CT_ERR_VERIFY;   /* RFC 8017 min */
     if (k > RSA_MAX_BYTES) return CT_ERR_VERIFY;
 
     /* m = sig^e mod n */
@@ -381,16 +325,165 @@ int ct_verify_rsa_pkcs1_sha256(const uint8_t *pub_der, size_t pub_der_len,
     memset(em_expected, 0, k);
     em_expected[0] = 0x00;
     em_expected[1] = 0x01;
-    size_t ps_len = k - 19 - 32 - 2;   /* filler FF count */
+    size_t ps_len = k - digest_info_len - hash_len - 3;
     memset(em_expected + 2, 0xFF, ps_len);
     em_expected[2 + ps_len] = 0x00;
-    memcpy(em_expected + 3 + ps_len, DIGEST_INFO_SHA256, 19);
-    if (ct_sha256(msg ? msg : (const uint8_t *)"", msg_len,
-                  em_expected + 3 + ps_len + 19) != CT_OK) return CT_ERR_VERIFY;
+    memcpy(em_expected + 3 + ps_len, digest_info, digest_info_len);
+    if (hash_fn(msg ? msg : (const uint8_t *)"", msg_len,
+                em_expected + 3 + ps_len + digest_info_len) != CT_OK)
+        return CT_ERR_VERIFY;
 
     /* Constant-time compare */
     uint8_t diff = 0;
     for (size_t i = 0; i < k; i++) diff |= em_actual[i] ^ em_expected[i];
 
+    return diff ? CT_ERR_VERIFY : CT_OK;
+}
+
+int ct_verify_rsa_pkcs1_sha256(const uint8_t *pub_der, size_t pub_der_len,
+                               const uint8_t *msg, size_t msg_len,
+                               const uint8_t *sig, size_t sig_len)
+{
+    return rsa_pkcs1_verify_hash(pub_der, pub_der_len, msg, msg_len, sig, sig_len,
+                                 DIGEST_INFO_SHA256, sizeof DIGEST_INFO_SHA256,
+                                 SHA256_LEN, ct_sha256);
+}
+
+int ct_verify_rsa_pkcs1_sha384(const uint8_t *pub_der, size_t pub_der_len,
+                               const uint8_t *msg, size_t msg_len,
+                               const uint8_t *sig, size_t sig_len)
+{
+    return rsa_pkcs1_verify_hash(pub_der, pub_der_len, msg, msg_len, sig, sig_len,
+                                 DIGEST_INFO_SHA384, sizeof DIGEST_INFO_SHA384,
+                                 SHA384_LEN, ct_sha384);
+}
+
+int ct_verify_rsa_pkcs1_sha512(const uint8_t *pub_der, size_t pub_der_len,
+                               const uint8_t *msg, size_t msg_len,
+                               const uint8_t *sig, size_t sig_len)
+{
+    return rsa_pkcs1_verify_hash(pub_der, pub_der_len, msg, msg_len, sig, sig_len,
+                                 DIGEST_INFO_SHA512, sizeof DIGEST_INFO_SHA512,
+                                 SHA512_LEN, ct_sha512);
+}
+
+/* ============================================================
+ * RSA-PSS SHA-256 verify (RFC 8017 §8.1.2 / §9.1.2)
+ * Salt length is recovered from the encoding, so certificates that
+ * use a non-default salt length (RFC 4055 permits variable sLen)
+ * still verify. TLS 1.3 CertificateVerify uses sLen == hLen.
+ * ============================================================ */
+
+static size_t bi_bit_len(const bi_t *a) {
+    if (a->n == 0) return 0;
+    size_t bits = (a->n - 1) * 64;
+    uint64_t top = a->limb[a->n - 1];
+    while (top) { bits++; top >>= 1; }
+    return bits;
+}
+
+/* MGF1 with SHA-256 (RFC 8017 §B.2.1). */
+static int mgf1_sha256(const uint8_t *seed, size_t seed_len,
+                       uint8_t *out, size_t out_len)
+{
+    size_t done = 0;
+    uint32_t counter = 0;
+    while (done < out_len) {
+        uint8_t ctr_be[4] = {
+            (uint8_t)(counter >> 24), (uint8_t)(counter >> 16),
+            (uint8_t)(counter >> 8),  (uint8_t)counter
+        };
+        uint8_t h[32];
+        ct_sha256_ctx_t c;
+        ct_sha256_init(&c);
+        ct_sha256_update(&c, seed, seed_len);
+        ct_sha256_update(&c, ctr_be, sizeof ctr_be);
+        ct_sha256_final(&c, h);
+
+        size_t n = out_len - done < sizeof h ? out_len - done : sizeof h;
+        memcpy(out + done, h, n);
+        done += n;
+        counter++;
+    }
+    return 0;
+}
+
+int ct_verify_rsa_pss_sha256(const uint8_t *pub_der, size_t pub_der_len,
+                             const uint8_t *msg, size_t msg_len,
+                             const uint8_t *sig, size_t sig_len)
+{
+    if (!pub_der || !sig || sig_len == 0) return CT_ERR_ARGS;
+    if (!msg && msg_len > 0) return CT_ERR_ARGS;
+
+    bi_t n, e;
+    if (parse_spki_rsa(pub_der, pub_der_len, &n, &e) != 0) return CT_ERR_VERIFY;
+    if (n.n == 0 || e.n == 0) return CT_ERR_VERIFY;
+
+    size_t k = bi_byte_len(&n);
+    if (k != sig_len || k > RSA_MAX_BYTES) return CT_ERR_VERIFY;
+
+    size_t mod_bits = bi_bit_len(&n);
+    if (mod_bits < 2) return CT_ERR_VERIFY;
+    size_t em_bits = mod_bits - 1;
+    size_t em_len = (em_bits + 7) / 8;
+    const size_t hlen = SHA256_LEN;
+    if (em_len > k || em_len < hlen + 2) return CT_ERR_VERIFY;
+
+    /* m = sig^e mod n; EM = I2OSP(m, k), left-padded to k bytes. */
+    bi_t s_bi, m_bi;
+    if (bi_from_be(&s_bi, sig, sig_len) != 0) return CT_ERR_VERIFY;
+    if (bi_cmp(&s_bi, &n) >= 0) return CT_ERR_VERIFY;
+    bi_modexp(&m_bi, &s_bi, &e, &n);
+
+    uint8_t em_buf[RSA_MAX_BYTES];
+    if (bi_to_be(em_buf, k, &m_bi) != 0) return CT_ERR_VERIFY;
+
+    /* When k > emLen the leading bytes MUST be zero (RFC 8017 §8.1.2). */
+    size_t lead = k - em_len;
+    uint8_t diff = 0;
+    for (size_t i = 0; i < lead; i++) diff |= em_buf[i];
+    const uint8_t *em = em_buf + lead;
+
+    size_t db_len = em_len - hlen - 1;
+    const uint8_t *masked_db = em;
+    const uint8_t *h = em + db_len;
+
+    /* Leftmost 8*emLen - emBits bits of maskedDB must be zero. */
+    size_t unused_bits = 8 * em_len - em_bits;
+    if (unused_bits) {
+        uint8_t keep = (uint8_t)(0xFF >> unused_bits);
+        if (masked_db[0] & (uint8_t)~keep) return CT_ERR_VERIFY;
+    }
+
+    /* DB = maskedDB XOR MGF1(H, dbLen); clear the unused top bits. */
+    uint8_t db[RSA_MAX_BYTES];
+    mgf1_sha256(h, hlen, db, db_len);
+    for (size_t i = 0; i < db_len; i++) db[i] ^= masked_db[i];
+    if (unused_bits) db[0] &= (uint8_t)(0xFF >> unused_bits);
+
+    /* DB = PS || 0x01 || salt. Recover salt length from the delimiter. */
+    size_t ps_len = 0;
+    while (ps_len < db_len && db[ps_len] == 0) ps_len++;
+    if (ps_len >= db_len || db[ps_len] != 0x01) return CT_ERR_VERIFY;
+    const uint8_t *salt = db + ps_len + 1;
+    size_t salt_len = db_len - ps_len - 1;
+
+    /* H' = SHA-256(0x00^8 || mHash || salt). */
+    uint8_t mhash[SHA256_LEN];
+    if (ct_sha256(msg ? msg : (const uint8_t *)"", msg_len, mhash) != CT_OK)
+        return CT_ERR_VERIFY;
+
+    uint8_t hprime[SHA256_LEN];
+    ct_sha256_ctx_t hc;
+    ct_sha256_init(&hc);
+    {
+        static const uint8_t zero8[8] = {0};
+        ct_sha256_update(&hc, zero8, sizeof zero8);
+    }
+    ct_sha256_update(&hc, mhash, sizeof mhash);
+    ct_sha256_update(&hc, salt, salt_len);
+    ct_sha256_final(&hc, hprime);
+
+    for (size_t i = 0; i < hlen; i++) diff |= (uint8_t)(h[i] ^ hprime[i]);
     return diff ? CT_ERR_VERIFY : CT_OK;
 }

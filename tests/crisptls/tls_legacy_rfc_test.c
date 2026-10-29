@@ -1,7 +1,8 @@
 /** tls_legacy_rfc_test.c — RFC conformance for TLS 1.0/1.1/1.2 legacy primitives.
  *
- *  Reference implementations transcribed from the RFC text, using libcrypto
- *  directly. Any mismatch means crisptls diverges from the RFC as written.
+ *  Reference implementations transcribed from the RFC text, using the native
+ *  primitive layer directly. Any mismatch means crisptls diverges from the
+ *  RFC as written.
  *
  *  Covers:
  *    TLS 1.0/1.1 PRF      RFC 2246 §5 / RFC 5246 §5
@@ -14,10 +15,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
-#include <openssl/hmac.h>
-#include <openssl/md5.h>
-#include <openssl/sha.h>
-#include <openssl/evp.h>
 
 #include "keyschedule_legacy.h"
 #include "crypto_legacy.h"
@@ -28,34 +25,28 @@
  *   A(0) = seed
  *   A(i) = HMAC(secret, A(i-1))
  *   P_hash = HMAC(secret, A(1) || seed) || HMAC(secret, A(2) || seed) || ... */
-static int ref_phash(const EVP_MD *md, const uint8_t *secret, size_t slen,
+static int ref_phash(ctl_hash_t md, const uint8_t *secret, size_t slen,
                      const uint8_t *seed, size_t seedlen,
                      uint8_t *out, size_t outlen)
 {
-    size_t hl = (size_t)EVP_MD_size(md);
-    uint8_t a[EVP_MAX_MD_SIZE];
-    unsigned int alen = 0;
+    size_t hl = ctl_hash_len(md);
+    if (hl == 0 || hl > 64) return -1;
+    uint8_t a[64], t[64];
 
     /* A(1) = HMAC(secret, seed) */
-    HMAC(md, secret, (int)slen, seed, seedlen, a, &alen);
+    if (ctl_hmac(md, secret, slen, seed, seedlen, a) != 0) return -1;
 
     size_t done = 0;
     while (done < outlen) {
-        uint8_t t[EVP_MAX_MD_SIZE];
-        unsigned int tlen = 0;
-        HMAC_CTX *ctx = HMAC_CTX_new();
-        HMAC_Init_ex(ctx, secret, (int)slen, md, NULL);
-        HMAC_Update(ctx, a, alen);
-        HMAC_Update(ctx, seed, seedlen);
-        HMAC_Final(ctx, t, &tlen);
-        HMAC_CTX_free(ctx);
+        ctl_part_t parts[2] = { { a, hl }, { seed, seedlen } };
+        if (ctl_hmac_parts(md, secret, slen, parts, 2, t) != 0) return -1;
 
-        size_t n = outlen - done < tlen ? outlen - done : tlen;
+        size_t n = outlen - done < hl ? outlen - done : hl;
         memcpy(out + done, t, n);
         done += n;
         if (done < outlen) {
             /* A(i+1) = HMAC(secret, A(i)) */
-            HMAC(md, secret, (int)slen, a, alen, a, &alen);
+            if (ctl_hmac(md, secret, slen, a, hl, a) != 0) return -1;
         }
     }
     return 0;
@@ -82,14 +73,14 @@ static int ref_prf_tls10(const uint8_t *secret, size_t slen, const char *label,
 
     uint8_t md5out[512];
     uint8_t shaout[512];
-    ref_phash(EVP_md5(),  s1, half, buf, buflen, md5out, outlen);
-    ref_phash(EVP_sha1(), s2, half, buf, buflen, shaout, outlen);
+    ref_phash(CTL_MD5,  s1, half, buf, buflen, md5out, outlen);
+    ref_phash(CTL_SHA1, s2, half, buf, buflen, shaout, outlen);
     for (size_t i = 0; i < outlen; i++) out[i] = md5out[i] ^ shaout[i];
     return 0;
 }
 
 /* RFC 5246 §5: TLS 1.2 PRF = P_hash(suite_hash, secret, label||seed). */
-static int ref_prf_tls12(const EVP_MD *md, const uint8_t *secret, size_t slen,
+static int ref_prf_tls12(ctl_hash_t md, const uint8_t *secret, size_t slen,
                          const char *label, const uint8_t *seed, size_t seedlen,
                          uint8_t *out, size_t outlen)
 {
@@ -148,7 +139,7 @@ int main(void) {
     printf("─── prf_tls12 ───\n");
     {
         uint8_t ref[48], got[48];
-        ref_prf_tls12(EVP_sha256(), master, 48, "master secret",
+        ref_prf_tls12(CTL_SHA256, master, 48, "master secret",
                       client_random, 32, ref, 48);
         if (prf_tls12(CTL_SHA256, master, 48, "master secret",
                       client_random, 32, got, 48)) {
@@ -156,7 +147,7 @@ int main(void) {
         } else cmp("tls12 master_secret(48)", got, ref, 48);
 
         uint8_t ref2[104], got2[104];
-        ref_prf_tls12(EVP_sha256(), master, 48, "key expansion",
+        ref_prf_tls12(CTL_SHA256, master, 48, "key expansion",
                       server_random, 32, ref2, 104);
         if (prf_tls12(CTL_SHA256, master, 48, "key expansion",
                       server_random, 32, got2, 104)) {
@@ -186,7 +177,7 @@ int main(void) {
             printf("  FAIL  tls_master_secret(TLS1.1) returned nonzero\n"); fail++;
         } else cmp("master_secret TLS1.1", got, ref, 48);
 
-        ref_prf_tls12(EVP_sha256(), pms, 48, "master secret", seed64, 64, ref, 48);
+        ref_prf_tls12(CTL_SHA256, pms, 48, "master secret", seed64, 64, ref, 48);
         if (tls_master_secret(TLS_V_12, CTL_SHA256, pms, 48,
                               client_random, server_random, got)) {
             printf("  FAIL  tls_master_secret(TLS1.2) returned nonzero\n"); fail++;
@@ -224,8 +215,8 @@ int main(void) {
         /* TLS 1.0/1.1 Finished: hs_hash is MD5(msgs)||SHA1(msgs), 36 bytes */
         uint8_t msgs[128]; fill(msgs, 128, 0x99);
         uint8_t hs_hash[36];
-        MD5_CTX m; MD5_Init(&m); MD5_Update(&m, msgs, 128); MD5_Final(hs_hash, &m);
-        SHA_CTX s; SHA1_Init(&s); SHA1_Update(&s, msgs, 128); SHA1_Final(hs_hash + 16, &s);
+        ctl_hash(CTL_MD5, msgs, 128, hs_hash);
+        ctl_hash(CTL_SHA1, msgs, 128, hs_hash + 16);
 
         uint8_t ref[12], got[12];
         ref_prf_tls10(master, 48, "client finished", hs_hash, 36, ref, 12);
@@ -244,15 +235,15 @@ int main(void) {
     {
         uint8_t msgs[128]; fill(msgs, 128, 0xAA);
         uint8_t hs_hash[32];
-        SHA256(msgs, 128, hs_hash);
+        ctl_hash(CTL_SHA256, msgs, 128, hs_hash);
 
         uint8_t ref[12], got[12];
-        ref_prf_tls12(EVP_sha256(), master, 48, "client finished", hs_hash, 32, ref, 12);
+        ref_prf_tls12(CTL_SHA256, master, 48, "client finished", hs_hash, 32, ref, 12);
         if (tls_finished_verify(TLS_V_12, CTL_SHA256, master, 1, hs_hash, 32, got)) {
             printf("  FAIL  tls_finished_verify(TLS1.2) returned nonzero\n"); fail++;
         } else cmp("finished TLS1.2 client", got, ref, 12);
 
-        ref_prf_tls12(EVP_sha256(), master, 48, "server finished", hs_hash, 32, ref, 12);
+        ref_prf_tls12(CTL_SHA256, master, 48, "server finished", hs_hash, 32, ref, 12);
         if (tls_finished_verify(TLS_V_12, CTL_SHA256, master, 0, hs_hash, 32, got)) {
             printf("  FAIL  tls_finished_verify(TLS1.2) returned nonzero\n"); fail++;
         } else cmp("finished TLS1.2 server", got, ref, 12);

@@ -2,8 +2,8 @@
 # Depends on libcrisptls for crypto primitives.
 
 CC     = cc
-AR     = llvm-ar
-RANLIB = llvm-ranlib
+AR ?= $(shell command -v ar 2>/dev/null || command -v llvm-ar 2>/dev/null || echo ar)
+RANLIB ?= $(shell command -v ranlib 2>/dev/null || command -v llvm-ranlib 2>/dev/null || echo ranlib)
 
 CRISPTLS_INC  = ../crisptls/include
 CRISPTLS_LIB  = ../crisptls/build/libcrisptls.a

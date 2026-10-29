@@ -1,7 +1,7 @@
 /** ssl3_rfc_test.c — RFC 6101 conformance for crisptls SSL 3.0 primitives.
  *
  *  Reference implementation is byte-for-byte transcribed from RFC 6101
- *  using only libcrypto EVP_* directly. Any mismatch means crisptls's
+ *  using the native primitive layer directly. Any mismatch means crisptls's
  *  helpers diverge from the RFC as written. No live server needed.
  *
  *  Tests:
@@ -14,12 +14,21 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
-#include <openssl/evp.h>
-#include <openssl/md5.h>
-#include <openssl/sha.h>
 
 #include "keyschedule_legacy.h"
 #include "crypto_legacy.h"
+#include "crypto.h"
+
+/* OpenSSL-shaped shims over the native streaming primitives so the RFC
+ * transcription below stays verbatim. */
+#define SHA_CTX             ct_sha1_ctx_t
+#define SHA1_Init(c)        ct_sha1_init(c)
+#define SHA1_Update(c,d,n)  ct_sha1_update((c), (d), (n))
+#define SHA1_Final(o,c)     ct_sha1_final((c), (o))
+#define MD5_CTX             ct_md5_ctx_t
+#define MD5_Init(c)         ct_md5_init(c)
+#define MD5_Update(c,d,n)   ct_md5_update((c), (d), (n))
+#define MD5_Final(o,c)      ct_md5_final((c), (o))
 
 /* ────────── reference implementations, from the RFC text ────────── */
 

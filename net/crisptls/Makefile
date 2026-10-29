@@ -4,13 +4,13 @@ UNAME_S := $(shell uname -s 2>/dev/null || echo Windows)
 
 ifeq ($(UNAME_S),Darwin)
   CC ?= cc
-  AR = llvm-ar
+  AR ?= $(shell command -v ar 2>/dev/null || command -v llvm-ar 2>/dev/null || echo ar)
 else ifeq ($(UNAME_S),Linux)
   CC ?= cc
-  AR = llvm-ar
+  AR ?= $(shell command -v ar 2>/dev/null || command -v llvm-ar 2>/dev/null || echo ar)
 else
   CC ?= aarch64-linux-android-clang
-  AR = llvm-ar
+  AR ?= $(shell command -v ar 2>/dev/null || command -v llvm-ar 2>/dev/null || echo ar)
 endif
 
 SRC_DIRS = src/api \
@@ -53,7 +53,7 @@ CFLAGS ?= -g -O1 -Wall -Wextra -I../.. \
          -Isrc/proto/state \
          -I../../utils
 
-LIBS = -lcrypto -lsodium -lssl
+LIBS = -lsodium
 
 .PHONY: all clean info
 
