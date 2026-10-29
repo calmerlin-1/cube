@@ -105,9 +105,9 @@ typedef enum {
 typedef struct {
     const char *raw;         size_t raw_len;
 
-    const char *scheme;      size_t scheme_len;    /* lowercase, no ':' */
+    const char *scheme;      size_t scheme_len;    /* as written, no ':' */
     const char *userinfo;    size_t userinfo_len;  /* "user:pass", undecoded, may be 0 */
-    const char *host;        size_t host_len;      /* lowercase ascii, no brackets for v6 */
+    const char *host;        size_t host_len;      /* as written (punycode if IDN), no brackets for v6 */
     const char *port_str;    size_t port_str_len;  /* NULL if absent */
     const char *path;        size_t path_len;      /* "/" if empty path */
     const char *query;       size_t query_len;     /* no leading '?' */

@@ -4,6 +4,9 @@ CC     ?= cc
 AR     = llvm-ar
 RANLIB = llvm-ranlib
 
+# Build the library by default; test binaries are opt-in targets.
+.DEFAULT_GOAL := all
+
 SRC_DIRS = src src/../data
 
 SRCS = $(wildcard src/*.c) $(wildcard data/*.c)

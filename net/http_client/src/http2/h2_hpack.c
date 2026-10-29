@@ -14,6 +14,7 @@
 
 #include "h2_internal.h"
 #include "http_client.h"
+#include <stdio.h>
 #include <string.h>
 
 extern int g_h2_trace;

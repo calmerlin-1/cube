@@ -18,7 +18,7 @@ all: build/bench build/bench_cached build/targeted build/vulnfuzz build/bench_ba
 
 build/libjs.a: $(ENGINE)
 	@mkdir -p build
-	llvm-ar rcs $@ $(ENGINE)
+	$(AR) rcs $@ $(ENGINE)
 	@echo "  libjs.a built"
 
 # Engine objects

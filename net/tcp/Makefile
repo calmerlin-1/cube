@@ -14,7 +14,7 @@ build/tcp.o: src/tcp.c include/tcp.h | build
 	$(CC) $(CFLAGS) -c src/tcp.c -o $@
 
 $(LIB): build/tcp.o
-	llvm-ar rcs $@ $<
+	$(AR) rcs $@ $<
 	@echo "  libtcp.a built"
 
 test: $(LIB)

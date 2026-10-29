@@ -16,6 +16,7 @@
     #include <stdarg.h>
     #include <string.h>
     #include <errno.h>
+    #include <limits.h>
 
     /* Linkage */
     #pragma comment(lib, "ws2_32.lib")
@@ -54,6 +55,7 @@
     #include <stdarg.h>
     #include <string.h>
     #include <errno.h>
+    #include <limits.h>
 
     #define cube_close(fd)          close(fd)
     #define cube_read(fd, b, n)     read((fd), (b), (n))

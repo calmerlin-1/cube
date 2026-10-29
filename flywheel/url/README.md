@@ -26,9 +26,7 @@ src/url_parser.c is the parser itself. It contains url_parse, url_parse_ex, url_
 
 src/url_percent.c contains the percent-encoding helpers. url_percent_decode turns %xx sequences into raw bytes. url_percent_encode_path and url_percent_encode_query turn raw bytes into %xx sequences, using different safe-byte sets for the path and the query. This file is deliberately separate from the parser so the parser can preserve %xx verbatim and let callers decide when to decode.
 
-src/url_schemes.c contains the scheme table and its lookup function. The table is a sorted array of {name, port, flags} rows. Lookup is binary search. The table covers around 40 built-in schemes: http, https, ftp, ftps, ws, wss, file, data, mailto, tel, ssh, sftp, git, ldap, ldaps, smb, nfs, redis, mongodb, postgres, mysql, amqp, mqtt, and the rest. New schemes can be added at runtime via url_schemes_load reading a config file. The file is around 13 KB.
-
-data/url_schemes.c is a copy of the same scheme table used for building at compile time. It generates the binary table via a code generator. For most consumers, src/url_schemes.c is the only one that matters.
+data/url_schemes.c contains the scheme table and its lookup function. The table is a sorted array of {name, port, flags} rows. Lookup is binary search. The table covers around 40 built-in schemes: http, https, ftp, ftps, ws, wss, file, data, mailto, tel, ssh, sftp, git, ldap, ldaps, smb, nfs, redis, mongodb, postgres, mysql, amqp, mqtt, and the rest. New schemes can be added at runtime via url_schemes_load reading a config file. The file is around 13 KB.
 
 data/scheme_ports.conf is the runtime extension file. It's a plain text file with one scheme per line in the format name port flags. Flags are p (has port), h (no host), o (opaque), t (TLS). Blank lines and lines starting with # are ignored. When url_schemes_load is called at startup, this file is parsed and its entries are merged into the built-in table.
 

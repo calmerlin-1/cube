@@ -69,6 +69,7 @@ int url_percent_decode(const char *in, size_t inlen,
         }
         if (plus_to_space && c == '+') c = ' ';
         if (w >= outcap) { if (outlen) *outlen = w; return URLP_ERR_OVERFLOW; }
+        out[w++] = (char)c;
     }
     if (outlen) *outlen = w;
     return URLP_OK;

@@ -8,6 +8,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <stdlib.h>
+#include <stdio.h>
 #ifdef _WIN32
     #include <winsock2.h>
     #include <ws2tcpip.h>
@@ -25,6 +26,16 @@
 #define URL_MAX_LEN_DEFAULT  (8u * 1024u * 1024u)
 #define URL_MAX_LEN          URL_MAX_LEN_DEFAULT
 #define URL_MAX_LEN_MIN      (64u)
+
+#if __STDC_VERSION__ >= 201112L
+    #define CUBE_THREAD_LOCAL _Thread_local
+#elif defined(__GNUC__) || defined(__clang__)
+    #define CUBE_THREAD_LOCAL __thread
+#elif defined(_MSC_VER)
+    #define CUBE_THREAD_LOCAL __declspec(thread)
+#else
+    #define CUBE_THREAD_LOCAL
+#endif
 
 static size_t g_url_max_len = URL_MAX_LEN_DEFAULT;
 
@@ -57,8 +68,8 @@ static void has_bad_char(const char *s, size_t n, int *saw_space, int *saw_ctrl)
     for (size_t i = 0; i < n; i++) {
         unsigned char c = (unsigned char)s[i];
         if (c <= 0x20 || c == 0x7f) {
-            if (c == ' ' || c == '\t') *saw_space = 1;
-            else                        *saw_ctrl  = 1;
+            if (c == ' ' || c == '\t' || c == '\r' || c == '\n') *saw_space = 1;
+            else                                                 *saw_ctrl  = 1;
         }
         if (*saw_space && *saw_ctrl) return;
     }
@@ -129,7 +140,7 @@ static size_t normalize_path(const char *in, size_t in_len,
                              char *out, size_t out_cap,
                              int has_authority) {
     if (in_len == 0) {
-        if (has_authority && out_cap > 0) { out[0] = '/'; out[1] = 0; return 1; }
+        if (has_authority && out_cap > 1) { out[0] = '/'; out[1] = 0; return 1; }
         if (out_cap) out[0] = 0;
         return 0;
     }
@@ -175,16 +186,6 @@ static size_t normalize_path(const char *in, size_t in_len,
         }
         out[w++] = in[i++];
     }
-#if __STDC_VERSION__ >= 201112L
-    #define CUBE_THREAD_LOCAL _Thread_local
-#elif defined(__GNUC__) || defined(__clang__)
-    #define CUBE_THREAD_LOCAL __thread
-#elif defined(_MSC_VER)
-    #define CUBE_THREAD_LOCAL __declspec(thread)
-#else
-    #define CUBE_THREAD_LOCAL
-#endif
-static CUBE_THREAD_LOCAL const scheme_info *g_known_scheme = NULL;
     return w;
 }
 
@@ -192,7 +193,7 @@ static CUBE_THREAD_LOCAL const scheme_info *g_known_scheme = NULL;
  * parse_impl uses it instead of calling url_scheme_lookup. Cleared after
  * every parse, so it can't leak between calls. Not thread-safe — the
  * cache layer is single-threaded by contract. */
-static _Thread_local const scheme_info *g_known_scheme = NULL;
+static CUBE_THREAD_LOCAL const scheme_info *g_known_scheme = NULL;
 
 /* Scheme info lookup. Uses g_known_scheme when url_parse_with_scheme
  * pre-set it, otherwise falls back to a full url_scheme_lookup. */
@@ -447,7 +448,9 @@ url_err url_parse_with_scheme(const char *s, size_t len,
     /* Note: g_known_scheme is restored on the only return path. If a
      * future change to parse_impl introduces longjmp/abort, wrap this in
      * a cleanup handler. As-is, safe: parse_impl has no abnormal exits. */
-    url_err rc = parse_impl(s, len, 0, out);
+    url_err rc;
+    g_known_scheme = known;
+    rc = parse_impl(s, len, 0, out);
     g_known_scheme = NULL;
     return rc;
 }
@@ -656,12 +659,34 @@ url_err url_join(const url_view *base, const char *rel, size_t rel_len,
     }
 
     if (rel[0] == '/') {
-        url_view tmp = *base;
-        tmp.path = rel;
-        tmp.path_len = rel_len;
-        tmp.query = NULL; tmp.query_len = 0;
-        tmp.fragment = NULL; tmp.fragment_len = 0;
-        return url_build_href(&tmp, out, out_cap, out_len);
+        /* RFC 3986 §5.2.2: an absolute-path reference replaces the base
+         * path, then dot segments are removed. Split any query/fragment
+         * tail first so it is preserved verbatim. */
+        const char *rp = rel;
+        size_t rp_len = rel_len;
+        const char *tail = NULL;
+        size_t tail_len = 0;
+        for (size_t i = 0; i < rel_len; i++) {
+            if (rel[i] == '?' || rel[i] == '#') {
+                rp_len = i;
+                tail = rel + i;
+                tail_len = rel_len - i;
+                break;
+            }
+        }
+        char norm[2048];
+        size_t nlen = normalize_path(rp, rp_len, norm, sizeof norm, 1);
+        if (nlen == 0) return URL_ERR_JOIN_FAILED;
+
+        size_t w = 0;
+        url_err e = url_build_origin(base, out, out_cap, &w);
+        if (e) return e;
+        if (append(out, out_cap, &w, norm, nlen)) return URL_ERR_BUFFER_TOO_SMALL;
+        if (tail && append(out, out_cap, &w, tail, tail_len))
+            return URL_ERR_BUFFER_TOO_SMALL;
+        if (w < out_cap) out[w] = '\0';
+        if (out_len) *out_len = w;
+        return URL_OK;
     }
 
     const char *base_path = base->path;
@@ -798,6 +823,15 @@ const char *url_err_name(url_err e) {
  * IPv6 literal syntax. Returns URL_OK or the first error found. */
 url_err url_validate(const url_view *u) {
     if (!u) return URL_ERR_EMPTY;
+
+    /* A validated URL must be absolute: relative references and
+     * schemeless authority references are not valid wire targets. */
+    if (u->scheme_len == 0 || u->scheme == NULL) return URL_ERR_SCHEME;
+
+    /* Skip schemes that legitimately carry no host (file:, data:, mailto:). */
+    if (u->host_len == 0 &&
+        !url_scheme_allows_no_host(u->scheme, u->scheme_len))
+        return URL_ERR_HOST_MISSING;
 
     for (size_t i = 0; i < u->userinfo_len; i++) {
         if (u->userinfo[i] == '%') {

@@ -14,7 +14,7 @@ build/json_color.o: src/json_color.c include/json.h | build
 	$(CC) $(CFLAGS) -c src/json_color.c -o $@
 
 $(LIB): build/json_color.o
-	llvm-ar rcs $@ $<
+	$(AR) rcs $@ $<
 	@echo "  libjson.a built"
 
 clean:

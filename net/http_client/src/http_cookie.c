@@ -5,6 +5,7 @@
  * Netscape-format save/load.
  */
 
+#define _GNU_SOURCE
 #include "http_client.h"
 #include <stdio.h>
 #include <stdlib.h>
