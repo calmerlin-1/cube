@@ -4,6 +4,7 @@
 #include "symbols.h"
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 static int match_opt(const char *name, const char *pat) {
     if (!pat) return 1;

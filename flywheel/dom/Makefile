@@ -59,19 +59,19 @@ build/%.o: src/%.c
 build/test_style: tests/test_style.c $(LIB)
 	$(CC) $(TEST_CFLAGS) \
 	  tests/test_style.c \
+	  $(CSS_SRCS) \
 	  $(LIB) \
 	  ../html/build/libhtml.a \
-	  $(CSS_SRCS) \
 	  -o $@
 	@echo "  built: build/test_style"
 
 build/test_js_style: tests/test_js_style.c $(LIB)
 	$(CC) $(TEST_CFLAGS) \
 	  tests/test_js_style.c \
-	  $(LIB) \
-	  ../html/build/libhtml.a \
 	  $(JS_TEST_SRCS) \
 	  $(CSS_SRCS) \
+	  $(LIB) \
+	  ../html/build/libhtml.a \
 	  -lm \
 	  -o $@
 	@echo "  built: build/test_js_style"

@@ -155,14 +155,17 @@ static void parse_one_rule(parse_ctx_t *p, css_arena_t *ar, css_stylesheet_t *ss
 
         if (p->cur.kind == CSST_LBRACE) {
             if (r.at_name_len == 5 && memcmp(r.at_name, "media", 5) == 0) r.kind = RULE_AT_MEDIA;
-            else if (r.at_name_len == 7 && memcmp(r.at_name, "supports", 8) == 0) r.kind = RULE_AT_SUPPORTS;
+            else if (r.at_name_len == 8 && memcmp(r.at_name, "supports", 8) == 0) r.kind = RULE_AT_SUPPORTS;
             else if (r.at_name_len == 9 && memcmp(r.at_name, "font-face", 9) == 0) r.kind = RULE_AT_FONT_FACE;
-            /* Read nested rules until } */
+            /* Push the at-rule before its nested rules so source order is
+             * preserved (the nested rules are currently hoisted to top level). */
+            rule_push(ss, ar, r);
             next(p);
             while (p->cur.kind != CSST_RBRACE && p->cur.kind != CSST_EOF) {
-                parse_one_rule(p, ar, ss);   /* recursion — for now, dump nested at top */
+                parse_one_rule(p, ar, ss);
             }
             if (p->cur.kind == CSST_RBRACE) next(p);
+            return;
         } else if (p->cur.kind == CSST_SEMICOLON) {
             if (r.at_name_len == 6 && memcmp(r.at_name, "import", 6) == 0) r.kind = RULE_AT_IMPORT;
             next(p);

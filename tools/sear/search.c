@@ -3,6 +3,7 @@
 
 #include "sear.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* If pattern looks like /.../ treat as regex, else substring. */

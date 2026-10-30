@@ -1,0 +1,57 @@
+{
+  // CUBE AI model manifest.
+  // Paths are relative to CUBE_AI_HOME, or to ./ai/models as a repo fallback.
+  // Weights are never downloaded automatically. installed is derived from the
+  // presence of weights_path at scan/refresh time; sha256 is empty until pinned.
+  "schema": 1,
+  "models": [
+    {
+      "name": "ppocr-v4",
+      "capability": "ocr",
+      "version": "v4",
+      "backend": "onnx",
+      "weights": "ppocr-v4/ppocr-v4.onnx",
+      "config": "ppocr-v4/config.json",
+      "sha256": "",
+      "input": "rgb8_image",
+      "output": "text_utf8",
+      "flags": ["optional", "quantized"]
+    },
+    {
+      "name": "mobilenetv2",
+      "capability": "image_classify",
+      "version": "v2.0",
+      "backend": "tflite",
+      "weights": "mobilenetv2/mobilenetv2.tflite",
+      "config": "mobilenetv2/labels.txt",
+      "sha256": "",
+      "input": "rgb8_image",
+      "output": "labels_json",
+      "flags": ["optional"]
+    },
+    {
+      "name": "whisper-base",
+      "capability": "speech",
+      "version": "base",
+      "backend": "ggml",
+      "weights": "whisper-base/ggml-base.bin",
+      "config": "whisper-base/config.json",
+      "sha256": "",
+      "input": "pcm_s16le_16k_mono",
+      "output": "text_utf8",
+      "flags": ["optional"]
+    },
+    {
+      "name": "slider-captcha-v1",
+      "capability": "captcha_slider",
+      "version": "1.0",
+      "backend": "custom",
+      "weights": "slider-captcha-v1/slider-captcha-v1.bin",
+      "config": "slider-captcha-v1/config.json",
+      "sha256": "",
+      "input": "image_pair",
+      "output": "offset_json",
+      "flags": ["optional", "quantized"]
+    }
+  ]
+}

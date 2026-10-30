@@ -1,6 +1,6 @@
 # Makefile — flywheel (top level). Builds core.c against all engines.
 
-CC ?= $(shell command -v cc 2>/dev/null || command -v gcc 2>/dev/null || echo aarch64-linux-android-clang)
+CC ?= $(shell command -v cc 2>/dev/null || command -v gcc 2>/dev/null || echo cc)
 
 HTML_LIB = html/build/libhtml.a
 CSS_LIB  = css/build/libcss.a

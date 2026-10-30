@@ -21,7 +21,7 @@ LDADD   := $(ROOT)/net/crisptls/build/libcrisptls.a \
            $(ROOT)/utils/build/libutils.a \
           -lsodium
 
-.PHONY: all test integration clean help
+.PHONY: all test integration clean help server server-test
 
 all: help
 
@@ -61,6 +61,26 @@ test:
 	    echo "════════ $$total_fail SUITE(S) FAILED ════════"; \
 	    exit 1; \
 	fi
+
+# ---- Legacy protocol test server -------------------------------------------
+#
+# A local HTTP/1.0+1.1 server exercising chunked, gzip/deflate, redirects,
+# and EOF-delimited bodies. zlib is optional: without it /gzip and /deflate
+# fall back to identity responses.
+HAVE_ZLIB := $(shell printf 'int main(void){return 0;}\n' | $(CC) -x c - -include zlib.h -lz -o /tmp/.tests_zlib 2>/dev/null && echo 1 || echo 0)
+SERVER_ZLIB := $(if $(filter 1,$(HAVE_ZLIB)),-DHAVE_ZLIB=1,)
+SERVER_LIBS := $(if $(filter 1,$(HAVE_ZLIB)),-lz,)
+SERVER := $(BUILD)/server
+
+server: $(SERVER)
+
+$(SERVER): server.c
+	@mkdir -p $(BUILD)
+	$(CC) $(CFLAGS) $(SERVER_ZLIB) server.c $(SERVER_LIBS) -o $@
+
+server-test: $(SERVER)
+	@chmod +x server_smoke.sh
+	@./server_smoke.sh
 
 # ---- Network integration tests (opt-in) -------------------------------------
 integration:

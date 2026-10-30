@@ -53,4 +53,10 @@ const crisptls_profile_t *crisptls_profile_lookup(const char *name);
 /** Load additional profiles from a config file. Returns count loaded. */
 int crisptls_profile_load_file(const char *path);
 
+/** Look up a profile loaded from a config file (NULL if none). */
+const crisptls_profile_t *crisptls_profile_find_loaded(const char *name);
+
+/** NULL-terminated names of runtime-loaded profiles. */
+const char *const *crisptls_profile_loaded_names(void);
+
 #endif

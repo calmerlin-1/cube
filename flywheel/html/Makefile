@@ -1,6 +1,6 @@
 # Makefile — flywheel/html
 
-CC ?= $(shell command -v cc 2>/dev/null || command -v gcc 2>/dev/null || echo aarch64-linux-android-clang)
+CC ?= $(shell command -v cc 2>/dev/null || command -v gcc 2>/dev/null || echo cc)
 AR ?= $(shell command -v ar 2>/dev/null || command -v llvm-ar 2>/dev/null || echo ar)
 # Prefer llvm-ar (Termux) if GNU ar isn't actually functional
 
@@ -28,8 +28,8 @@ build/%.o: src/%.c
 build/test_format: tests/test_format.c $(OBJS)
 	$(CC) $(CFLAGS) tests/test_format.c $(OBJS) -o $@
 	@echo "  built: build/test_format"
-build/test_html: tests/test_html.c $(OBJS)
-	$(CC) $(CFLAGS) tests/test_html.c $(OBJS) -o $@
+build/test_html: tests/test_html.c $(OBJS) $(CSS_LIB)
+	$(CC) $(CFLAGS) tests/test_html.c $(OBJS) $(CSS_LIB) -o $@
 	@echo "  built: build/test_html"
 
 CSS_LIB = ../css/build/libcss.a
@@ -44,16 +44,16 @@ build/test_extract: tests/test_extract.c $(OBJS)
 
 
 
-build/fuzz_html: tests/fuzz_html.c $(OBJS)
-	$(CC) $(CFLAGS) tests/fuzz_html.c $(OBJS) -o $@
+build/fuzz_html: tests/fuzz_html.c $(OBJS) $(CSS_LIB)
+	$(CC) $(CFLAGS) tests/fuzz_html.c $(OBJS) $(CSS_LIB) -o $@
 	@echo "  built: build/fuzz_html"
 
-build/fuzz_html_hard: tests/fuzz_html_hard.c $(OBJS)
-	$(CC) $(CFLAGS) tests/fuzz_html_hard.c $(OBJS) -o $@
+build/fuzz_html_hard: tests/fuzz_html_hard.c $(OBJS) $(CSS_LIB)
+	$(CC) $(CFLAGS) tests/fuzz_html_hard.c $(OBJS) $(CSS_LIB) -o $@
 	@echo "  built: build/fuzz_html_hard"
 
-build/fuzz_html_chaos: tests/fuzz_html_chaos.c $(OBJS)
-	$(CC) $(CFLAGS) tests/fuzz_html_chaos.c $(OBJS) -o $@
+build/fuzz_html_chaos: tests/fuzz_html_chaos.c $(OBJS) $(CSS_LIB)
+	$(CC) $(CFLAGS) tests/fuzz_html_chaos.c $(OBJS) $(CSS_LIB) -o $@
 	@echo "  built: build/fuzz_html_chaos"
 
 test: build/test_html build/fuzz_html

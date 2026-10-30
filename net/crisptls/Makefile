@@ -9,7 +9,7 @@ else ifeq ($(UNAME_S),Linux)
   CC ?= cc
   AR ?= $(shell command -v ar 2>/dev/null || command -v llvm-ar 2>/dev/null || echo ar)
 else
-  CC ?= aarch64-linux-android-clang
+  CC ?= cc
   AR ?= $(shell command -v ar 2>/dev/null || command -v llvm-ar 2>/dev/null || echo ar)
 endif
 

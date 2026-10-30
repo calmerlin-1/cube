@@ -120,7 +120,7 @@ static char *blank_comments(const char *p, size_t n, int *in_block) {
         *in_block = 0;
     }
     while (i < n) {
-        /* Skip past string and char literals — a "//" or "/*" inside a
+        /* Skip past string and char literals — a comment opener inside a
          * string (e.g. append(..., "//", 2)) is data, not a comment. We
          * do not blank the string here (blank_strings runs later); we
          * just step over it so its contents don't look like a comment. */

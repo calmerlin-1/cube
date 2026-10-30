@@ -11,21 +11,27 @@ else ifeq ($(UNAME_S),Linux)
 AR ?= $(shell command -v ar 2>/dev/null || command -v llvm-ar 2>/dev/null || echo ar)
 RANLIB ?= $(shell command -v ranlib 2>/dev/null || command -v llvm-ranlib 2>/dev/null || echo ranlib)
 else
-  CC     ?= aarch64-linux-android-clang
+  CC     ?= cc
 AR ?= $(shell command -v ar 2>/dev/null || command -v llvm-ar 2>/dev/null || echo ar)
 RANLIB ?= $(shell command -v ranlib 2>/dev/null || command -v llvm-ranlib 2>/dev/null || echo ranlib)
 endif
 
-CFLAGS  = -O2 -Wall -Wextra \
+HAVE_PTHREAD := $(shell printf 'int main(void){return 0;}\n' | $(CC) -x c - -include pthread.h -pthread -o /tmp/.dns_pthread 2>/dev/null && echo 1 || echo 0)
+ifeq ($(HAVE_PTHREAD),1)
+  PTHREAD_CFLAGS = -DHAVE_PTHREAD=1 -pthread
+  PTHREAD_LIBS   = -pthread
+endif
+
+CFLAGS  = -O2 -Wall -Wextra $(PTHREAD_CFLAGS) \
           -Iinclude \
           -Isrc/proto \
           -Isrc/transport \
           -Isrc/runtime \
           -Isrc/api \
           -I../crisptls/include
-LDFLAGS =
+LDFLAGS = $(PTHREAD_LIBS)
 CRISPTLS_LIB = ../crisptls/build/libcrisptls.a
-LIBS    = $(CRISPTLS_LIB) -lsodium
+LIBS    = $(CRISPTLS_LIB) -lsodium $(PTHREAD_LIBS)
 
 SRC_DIRS = src/api src/proto src/transport src/cache src/runtime
 SRCS     = $(foreach d, $(SRC_DIRS), $(wildcard $(d)/*.c))

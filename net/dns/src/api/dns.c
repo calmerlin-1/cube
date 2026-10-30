@@ -12,6 +12,9 @@
 #include <stdio.h>
 #include <time.h>
 #include <ctype.h>
+#ifdef HAVE_PTHREAD
+#include <pthread.h>
+#endif
 
 uint64_t dns_now_ns(void);
 
@@ -420,31 +423,95 @@ int dns_resolve_reverse(dns_resolver_t *r, const char *ip, dns_answer_t *out) {
     return dns_resolve(r, rev, DNS_TYPE_PTR, 0, out);
 }
 
+static int dual_merge(const dns_answer_t *a4, int r4,
+                      const dns_answer_t *a6, int r6,
+                      const char *name, dns_answer_t *out) {
+    dns_arena_t *ar = dns_arena_new(4096);
+    if (!ar) return DNS_ERR_NOMEM;
+    size_t total = (r4 == DNS_OK ? a4->count : 0) + (r6 == DNS_OK ? a6->count : 0);
+    memset(out, 0, sizeof(*out));
+    out->arena = ar;
+    out->records = (dns_record_t *)dns_arena_alloc(ar, total * sizeof(dns_record_t));
+    if (!out->records) { dns_arena_free(ar); out->arena = NULL; return DNS_ERR_NOMEM; }
+    size_t w = 0;
+    if (r4 == DNS_OK) for (size_t i = 0; i < a4->count; i++) out->records[w++] = a4->records[i];
+    if (r6 == DNS_OK) for (size_t i = 0; i < a6->count; i++) out->records[w++] = a6->records[i];
+    out->count = w;
+    out->capacity = total;
+    snprintf(out->qname, sizeof(out->qname), "%s", name);
+    return DNS_OK;
+}
+
+#ifdef HAVE_PTHREAD
+typedef struct {
+    dns_resolver_t *r;
+    const char *name;
+    uint16_t type;
+    dns_answer_t *out;
+    int rc;
+} dns_dual_job_t;
+
+static void *dns_dual_worker(void *arg) {
+    dns_dual_job_t *j = (dns_dual_job_t *)arg;
+    j->rc = dns_resolve(j->r, j->name, j->type, 0, j->out);
+    return NULL;
+}
+#endif
+
 int dns_resolve_dual(dns_resolver_t *r, const char *name, dns_answer_t *out) {
     if (!r || !name || !out) return DNS_ERR_ARGS;
     dns_answer_t a4, a6;
     memset(&a4, 0, sizeof(a4));
     memset(&a6, 0, sizeof(a6));
-    int r4 = dns_resolve_a(r, name, &a4);
-    int r6 = dns_resolve_aaaa(r, name, &a6);
-    if (r4 != DNS_OK && r6 != DNS_OK) { dns_answer_free(&a4); dns_answer_free(&a6); return r4; }
+    int r4 = DNS_ERR_NO_RECORDS, r6 = DNS_ERR_NO_RECORDS;
 
-    dns_arena_t *ar = dns_arena_new(4096);
-    if (!ar) { dns_answer_free(&a4); dns_answer_free(&a6); return DNS_ERR_NOMEM; }
-    size_t total = (r4 == DNS_OK ? a4.count : 0) + (r6 == DNS_OK ? a6.count : 0);
-    memset(out, 0, sizeof(*out));
-    out->arena = ar;
-    out->records = (dns_record_t *)dns_arena_alloc(ar, total * sizeof(dns_record_t));
-    if (!out->records) { dns_arena_free(ar); out->arena = NULL; dns_answer_free(&a4); dns_answer_free(&a6); return DNS_ERR_NOMEM; }
-    size_t w = 0;
-    if (r4 == DNS_OK) for (size_t i = 0; i < a4.count; i++) out->records[w++] = a4.records[i];
-    if (r6 == DNS_OK) for (size_t i = 0; i < a6.count; i++) out->records[w++] = a6.records[i];
-    out->count = w;
-    out->capacity = total;
-    snprintf(out->qname, sizeof(out->qname), "%s", name);
+#ifdef HAVE_PTHREAD
+    /* Race A and AAAA on independent resolvers so their caches/upstream
+     * state can't race. Persistence is disabled on the workers; the
+     * caller's resolver remains the persistent one. */
+    dns_config_t cfg4 = r->cfg, cfg6 = r->cfg;
+    cfg4.persist_path = NULL; cfg4.cache_path = NULL;
+    cfg6.persist_path = NULL; cfg6.cache_path = NULL;
+    dns_resolver_t *w4 = dns_resolver_new(&cfg4);
+    dns_resolver_t *w6 = dns_resolver_new(&cfg6);
+    if (w4 && w6) {
+        dns_dual_job_t j4 = { w4, name, DNS_TYPE_A,    &a4, DNS_ERR_NO_RECORDS };
+        dns_dual_job_t j6 = { w6, name, DNS_TYPE_AAAA, &a6, DNS_ERR_NO_RECORDS };
+        pthread_t t4, t6;
+        int ok4 = pthread_create(&t4, NULL, dns_dual_worker, &j4) == 0;
+        int ok6 = pthread_create(&t6, NULL, dns_dual_worker, &j6) == 0;
+        if (ok4) pthread_join(t4, NULL);
+        if (ok6) pthread_join(t6, NULL);
+        if (!ok4) j4.rc = dns_resolve_a(r, name, &a4);
+        if (!ok6) j6.rc = dns_resolve_aaaa(r, name, &a6);
+        dns_resolver_free(w4);
+        dns_resolver_free(w6);
+        if (j4.rc == DNS_OK || j6.rc == DNS_OK) {
+            int rc = dual_merge(&a4, j4.rc, &a6, j6.rc, name, out);
+            dns_answer_free(&a4);
+            dns_answer_free(&a6);
+            return rc;
+        }
+        dns_answer_free(&a4);
+        dns_answer_free(&a6);
+        return j4.rc;
+    }
+    if (w4) dns_resolver_free(w4);
+    if (w6) dns_resolver_free(w6);
+    memset(&a4, 0, sizeof(a4));
+    memset(&a6, 0, sizeof(a6));
+#endif
+
+    r4 = dns_resolve_a(r, name, &a4);
+    r6 = dns_resolve_aaaa(r, name, &a6);
+    if (r4 != DNS_OK && r6 != DNS_OK) {
+        dns_answer_free(&a4); dns_answer_free(&a6);
+        return r4;
+    }
+    int rc = dual_merge(&a4, r4, &a6, r6, name, out);
     dns_answer_free(&a4);
     dns_answer_free(&a6);
-    return DNS_OK;
+    return rc;
 }
 
 void dns_answer_free(dns_answer_t *a) {

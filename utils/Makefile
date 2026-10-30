@@ -1,4 +1,4 @@
-CC ?= $(shell command -v cc 2>/dev/null || command -v gcc 2>/dev/null || echo aarch64-linux-android-clang)
+CC ?= $(shell command -v cc 2>/dev/null || command -v gcc 2>/dev/null || echo cc)
 AR ?= $(shell command -v ar 2>/dev/null || command -v llvm-ar 2>/dev/null || echo ar)
 
 SRCS = $(wildcard *.c)

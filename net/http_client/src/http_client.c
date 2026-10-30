@@ -16,6 +16,7 @@
  */
 
 #include "http_client.h"
+#include "http_protocol.h"
 #include "http_status.h"
 
 #include <errno.h>
@@ -852,8 +853,11 @@ int http_send_io(const http_io_t       *io,
                  const http_request_t  *req,
                  http_response_t       *out)
 {
-    if (alpn && strcmp(alpn, "h2") == 0)
+    const http_protocol_t *p = http_protocol_for_alpn(alpn);
+    if (p->id == HTTP_PROTO_H2)
         return http2_send_io(io, host, port, scheme, req, out);
+    if (p->id == HTTP_PROTO_H3)
+        return -100;   /* registered, sender not wired yet */
     return http_client_send_io(io, host, port, req, out);
 }
 

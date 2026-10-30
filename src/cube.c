@@ -12,6 +12,7 @@
     #define close _close
     #define read  _read
     #define write _write
+    #define isatty _isatty
 #else
     #include <poll.h>
     #include <time.h>
@@ -35,6 +36,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <errno.h>
 #include <signal.h>
 #ifndef _WIN32
@@ -52,8 +54,11 @@
 #include "dns.h"
 #include "crisptls.h"
 #include "crisptls_policy.h"
+#include "crisptls_fingerprint.h"
 #include "http_client.h"
+#include "http_protocol.h"
 #include "http2.h"
+#include "proxy.h"
 #include "dom.h"
 #include "dom_style.h"
 #include "css.h"
@@ -61,6 +66,9 @@
 #include "trace.h"
 #include "html.h"
 #include "json.h"
+#ifdef HAVE_ZLIB
+#include <zlib.h>
+#endif
 #include <fcntl.h>
 #include <sys/time.h>
 
@@ -82,8 +90,14 @@ typedef struct {
     int         debug;       /* --debug: library traces on stderr */
     int         trace;       /* --trace: full byte-level trace */
     int         retries;      /* --retries N: default 3 */
-    const char *urls[32];     /* positional URL/domain args */
+    const char *urls[256];    /* positional URL/domain args + imported targets */
     int         n_urls;
+    const char *input_file;   /* --input FILE: URL list, HAR, or curl command */
+    const char *har_path;     /* --har/--intercept FILE */
+    int         intercept;    /* --intercept: print capture events to stderr */
+    int         no_decode;    /* --no-decode: leave Content-Encoding bodies raw */
+    const char *proxy;        /* --proxy URL (http/socks5/socks5h) */
+    const char *no_proxy;     /* --no-proxy LIST */
     int         body_only;   /* -b: print only the body */
     int         show_headers;
     int         show_cert;
@@ -110,6 +124,8 @@ typedef struct {
     int         timeout_ms;
     size_t      max_url_len;    /* 0 = library default (8 MB) */
     size_t      max_norm_buf;   /* 0 = default 8192, capped at 1 MB */
+    int         check_json;   /* 0=off, 1=JSON, 2=JSONC */
+    int         interactive;  /* -I/--interactive: read commands from stdin */
 } cube_opts_t;
 /* Forward decl for repo-relative path resolution (defined near main). */
 static const char *cube_repo_path(const char *rel, char *buf, size_t cap);
@@ -126,9 +142,15 @@ static void usage(const char *argv0) {
 "  --no-follow           do not follow redirects\n"
 "\n"
 "TLS:\n"
-"  --profile NAME        chrome-120 | firefox-121 | curl-8\n"
+"  --profile NAME        chrome-120|firefox-121|curl-8|chrome-131|firefox-133|edge-120|safari-17\n"
 "  --insecure            skip certificate verification\n"
 "  --no-tls              force plain HTTP even for https:// URLs\n"
+"  --proxy URL           HTTP/SOCKS5 proxy (http://, socks5://, socks5h://)\n"
+"  --no-proxy LIST       comma/space separated hosts that bypass the proxy\n"
+"  --input FILE          import targets from URL list, HAR, or curl command (- = stdin)\n"
+"  --har FILE            write captured requests/responses as HAR 1.2\n"
+"  --intercept [FILE]    print capture events; FILE defaults to cube.har\n"
+"  --no-decode           do not decode gzip/deflate response bodies\n"
 "  --http1               force ALPN=http/1.1 (no HTTP/2)\n"
 "  --show-cert           print peer cert chain info\n"
 "  --ja3                 print JA3 fingerprint\n"
@@ -154,6 +176,15 @@ static void usage(const char *argv0) {
 "  --retries N           network/HTTP retry attempts (default 3)\n"
 "  --raw                 write body bytes as-is (no formatting/color)\n"
 "  --lines SPEC          select body lines: N, N-M, :N, -N:\n"
+"\n"
+"Interactive:\n"
+"  -I, --interactive     read commands from stdin (REPL; URL optional)\n"
+"                        commands: help, get <url>, set <key> <value>,\n"
+"                        unset <key>, show, quit/exit\n"
+"\n"
+"Validation:\n"
+"  --check-json [FILE]   validate JSON from FILE (default: stdin)\n"
+"  --check-jsonc [FILE]  validate JSON with comments/trailing commas\n"
 "  -h, --help            this help\n"
 "\n", argv0);
 }
@@ -688,12 +719,335 @@ static void apply_runtime_opts(const cube_opts_t *o) {
 }
 
 /* Main */
+/* ---- Target import, HAR capture, content decoding ---------------------- */
+
+static int cube_ci_eq(const char *a, const char *b) {
+    while (*a && *b) {
+        unsigned char ca = (unsigned char)*a++, cb = (unsigned char)*b++;
+        if (ca >= 'A' && ca <= 'Z') ca = (unsigned char)(ca - 'A' + 'a');
+        if (cb >= 'A' && cb <= 'Z') cb = (unsigned char)(cb - 'A' + 'a');
+        if (ca != cb) return 0;
+    }
+    return *a == '\0' && *b == '\0';
+}
+
+static int add_url(cube_opts_t *o, const char *s, size_t len) {
+    while (len && isspace((unsigned char)*s)) { s++; len--; }
+    while (len && isspace((unsigned char)s[len - 1])) len--;
+    if (len >= 2 && ((s[0] == '"' && s[len - 1] == '"') ||
+                     (s[0] == '\'' && s[len - 1] == '\''))) { s++; len -= 2; }
+    if (!len || s[0] == '#') return 0;
+    if (o->n_urls >= (int)(sizeof(o->urls) / sizeof(o->urls[0]))) return -1;
+    char *p = (char *)malloc(len + 1);
+    if (!p) return -1;
+    memcpy(p, s, len); p[len] = 0;
+    o->urls[o->n_urls++] = p;
+    if (!o->url) o->url = p;
+    return 0;
+}
+
+static void add_targets_text(cube_opts_t *o, const char *text) {
+    const char *p = text;
+    while (*p) {
+        while (*p && (isspace((unsigned char)*p) || *p == ',' || *p == ';')) p++;
+        const char *start = p;
+        while (*p && !isspace((unsigned char)*p) && *p != ',' && *p != ';') p++;
+        if (p > start && add_url(o, start, (size_t)(p - start)) != 0)
+            fprintf(stderr, "%scube: target list full (max %zu)%s\n",
+                    col_red(), sizeof(o->urls) / sizeof(o->urls[0]), col_reset());
+    }
+}
+
+static int har_extract_urls(cube_opts_t *o, const char *buf) {
+    const char *p = buf;
+    int found = 0;
+    while ((p = strstr(p, "\"url\"")) != NULL) {
+        p += 5;
+        while (*p && *p != ':' && *p != '}') p++;
+        if (*p != ':') continue;
+        p++;
+        while (*p && isspace((unsigned char)*p)) p++;
+        if (*p != '"') continue;
+        p++;
+        char tmp[4096]; size_t n = 0;
+        while (*p && *p != '"' && n + 1 < sizeof tmp) {
+            if (*p == '\\' && p[1]) {
+                p++;
+                switch (*p) {
+                case 'n': tmp[n++] = ' '; break;
+                case 't': tmp[n++] = ' '; break;
+                case 'r': tmp[n++] = ' '; break;
+                case '/': tmp[n++] = '/'; break;
+                case '"': tmp[n++] = '"'; break;
+                case '\\': tmp[n++] = '\\'; break;
+                case 'u':
+                    if (p[1] && p[2] && p[3] && p[4]) p += 4;
+                    tmp[n++] = '?';
+                    break;
+                default: tmp[n++] = *p; break;
+                }
+                p++;
+            } else tmp[n++] = *p++;
+        }
+        tmp[n] = 0;
+        if (n) { add_url(o, tmp, n); found = 1; }
+    }
+    return found;
+}
+
+static int curl_extract_urls(cube_opts_t *o, const char *buf) {
+    const char *p = buf;
+    int found = 0;
+    while (*p) {
+        const char *h = strstr(p, "http://");
+        const char *s = strstr(p, "https://");
+        if (!h || (s && s < h)) h = s;
+        if (!h) break;
+        const char *e = h;
+        while (*e && !isspace((unsigned char)*e) && *e != '\'' && *e != '"') e++;
+        if (add_url(o, h, (size_t)(e - h)) == 0) found = 1;
+        p = e;
+    }
+    if (!found) {
+        /* curl bare-domain form: take first token after "curl" that is not a flag */
+        p = strstr(buf, "curl");
+        p = p ? p + 4 : buf;
+        while (*p) {
+            while (*p && isspace((unsigned char)*p)) p++;
+            const char *st = p;
+            while (*p && !isspace((unsigned char)*p)) p++;
+            if (p > st && *st != '-') { add_url(o, st, (size_t)(p - st)); found = 1; break; }
+        }
+    }
+    return found;
+}
+
+static int load_targets_file(cube_opts_t *o, const char *path) {
+    FILE *f = strcmp(path, "-") ? fopen(path, "rb") : stdin;
+    if (!f) {
+        fprintf(stderr, "%scube: cannot open %s: %s%s\n",
+                col_red(), path, strerror(errno), col_reset());
+        return -1;
+    }
+    size_t cap = 1 << 16, len = 0;
+    char *buf = (char *)malloc(cap + 1);
+    if (!buf) { if (f != stdin) fclose(f); return -1; }
+    for (;;) {
+        if (len == cap) {
+            if (cap >= 64u * 1024u * 1024u) break;
+            char *nb = (char *)realloc(buf, cap * 2 + 1);
+            if (!nb) { free(buf); if (f != stdin) fclose(f); return -1; }
+            buf = nb; cap *= 2;
+        }
+        size_t n = fread(buf + len, 1, cap - len, f);
+        len += n;
+        if (n == 0) break;
+    }
+    if (f != stdin) fclose(f);
+    buf[len] = 0;
+    if (strstr(buf, "\"entries\"") && strstr(buf, "\"url\""))
+        har_extract_urls(o, buf);
+    else if (strstr(buf, "curl") && (strstr(buf, "--url") || strstr(buf, "://")))
+        curl_extract_urls(o, buf);
+    else
+        add_targets_text(o, buf);
+    free(buf);
+    if (o->n_urls == 0) {
+        fprintf(stderr, "%scube: no targets found in %s%s\n", col_red(), path, col_reset());
+        return -1;
+    }
+    return 0;
+}
+
+/* ---- HAR 1.2 writer (streaming) ---- */
+static FILE *g_har = NULL;
+static int   g_har_first = 1;
+
+static void har_str(FILE *f, const char *s, size_t n) {
+    fputc('"', f);
+    for (size_t i = 0; i < n; i++) {
+        unsigned char c = (unsigned char)s[i];
+        switch (c) {
+        case '"':  fputs("\\\"", f); break;
+        case '\\': fputs("\\\\", f); break;
+        case '\n': fputs("\\n", f); break;
+        case '\r': fputs("\\r", f); break;
+        case '\t': fputs("\\t", f); break;
+        default:
+            if (c < 0x20) fprintf(f, "\\u%04x", c);
+            else fputc(c, f);
+        }
+    }
+    fputc('"', f);
+}
+
+static void har_begin(const char *path) {
+    g_har = fopen(path, "wb");
+    if (!g_har) {
+        fprintf(stderr, "%scube: cannot write %s: %s%s\n",
+                col_red(), path, strerror(errno), col_reset());
+        return;
+    }
+    g_har_first = 1;
+    fputs("{\"log\":{\"version\":\"1.2\",\"creator\":{\"name\":\"cube\",\"version\":\"1.0\"},"
+          "\"entries\":[\n", g_har);
+}
+
+static void har_end(void) {
+    if (!g_har) return;
+    fputs("\n]}}\n", g_har);
+    fclose(g_har);
+    g_har = NULL;
+}
+
+static int header_is(const char *name, const char *want) { return cube_ci_eq(name, want); }
+
+static const char *header_ci(const http_response_t *r, const char *name) {
+    for (size_t i = 0; i < r->headers.count; i++)
+        if (header_is(r->headers.items[i].name, name)) return r->headers.items[i].value;
+    return NULL;
+}
+
+#ifdef HAVE_ZLIB
+static void header_remove(http_headers_t *h, const char *name) {
+    for (size_t i = 0; i < h->count; i++) {
+        if (!header_is(h->items[i].name, name)) continue;
+        free(h->items[i].name);
+        free(h->items[i].value);
+        memmove(&h->items[i], &h->items[i + 1], (h->count - i - 1) * sizeof(h->items[0]));
+        h->count--;
+        return;
+    }
+}
+#endif /* HAVE_ZLIB */
+
+#ifdef HAVE_ZLIB
+static int inflate_buffer(const unsigned char *in, size_t in_len, int wbits,
+                          unsigned char **out, size_t *out_len) {
+    z_stream zs;
+    memset(&zs, 0, sizeof zs);
+    if (inflateInit2(&zs, wbits) != Z_OK) return -1;
+    size_t cap = in_len * 4 + 1024, len = 0;
+    if (cap < 4096) cap = 4096;
+    unsigned char *buf = (unsigned char *)malloc(cap);
+    if (!buf) { inflateEnd(&zs); return -1; }
+    zs.next_in = (Bytef *)in;
+    zs.avail_in = (uInt)in_len;
+    int rc = Z_OK;
+    while (rc != Z_STREAM_END) {
+        if (len == cap) {
+            if (cap >= 256u * 1024u * 1024u) { rc = Z_MEM_ERROR; break; }
+            unsigned char *nb = (unsigned char *)realloc(buf, cap * 2);
+            if (!nb) { rc = Z_MEM_ERROR; break; }
+            buf = nb; cap *= 2;
+        }
+        zs.next_out = buf + len;
+        zs.avail_out = (uInt)(cap - len);
+        rc = inflate(&zs, Z_NO_FLUSH);
+        len = cap - zs.avail_out;
+        if (rc != Z_OK && rc != Z_STREAM_END) break;
+        if (zs.avail_in == 0 && rc == Z_OK) break;
+    }
+    inflateEnd(&zs);
+    if (rc != Z_STREAM_END || len == 0) { free(buf); return -1; }
+    *out = buf; *out_len = len;
+    return 0;
+}
+#endif /* HAVE_ZLIB */
+
+static int decode_response(http_response_t *r) {
+#ifdef HAVE_ZLIB
+    const char *ce = header_ci(r, "Content-Encoding");
+    if (!ce || !r->body || r->body_len == 0) return 0;
+    int gz = strstr(ce, "gzip") != NULL || strstr(ce, "x-gzip") != NULL;
+    int df = strstr(ce, "deflate") != NULL;
+    if (!gz && !df) return 0;
+    unsigned char *out = NULL; size_t out_len = 0;
+    int ok = -1;
+    if (gz) ok = inflate_buffer(r->body, r->body_len, 16 + MAX_WBITS, &out, &out_len);
+    else {
+        ok = inflate_buffer(r->body, r->body_len, MAX_WBITS, &out, &out_len);
+        if (ok != 0) ok = inflate_buffer(r->body, r->body_len, -MAX_WBITS, &out, &out_len);
+    }
+    if (ok != 0) return -1;
+    free(r->body);
+    r->body = out;
+    r->body_len = out_len;
+    header_remove(&r->headers, "Content-Encoding");
+    header_remove(&r->headers, "Content-Length");
+    return 1;
+#else
+    (void)r;
+    return 0;   /* zlib not available at build time */
+#endif
+}
+
+static void har_record(const char *url, const char *method,
+                       const http_response_t *r, long elapsed_ms) {
+    if (!g_har) return;
+    if (!g_har_first) fputs(",\n", g_har);
+    g_har_first = 0;
+
+    char date[64] = "";
+    time_t now = time(NULL);
+    struct tm tmv;
+#ifdef _WIN32
+    gmtime_s(&tmv, &now);
+#else
+    gmtime_r(&now, &tmv);
+#endif
+    strftime(date, sizeof date, "%Y-%m-%dT%H:%M:%SZ", &tmv);
+
+    const char *mime = header_ci(r, "Content-Type");
+    fputs("{\"startedDateTime\":", g_har);
+    har_str(g_har, date, strlen(date));
+    fprintf(g_har, ",\"time\":%ld,\"request\":{\"method\":", elapsed_ms);
+    har_str(g_har, method ? method : "GET", strlen(method ? method : "GET"));
+    fputs(",\"url\":", g_har);
+    har_str(g_har, url, strlen(url));
+    fputs(",\"httpVersion\":\"HTTP/1.1\",\"headers\":[],\"queryString\":[],"
+          "\"cookies\":[],\"headersSize\":-1,\"bodySize\":0},", g_har);
+    fprintf(g_har, "\"response\":{\"status\":%d,\"statusText\":", r->status_code);
+    har_str(g_har, r->reason ? r->reason : "", r->reason ? strlen(r->reason) : 0);
+    fputs(",\"httpVersion\":\"HTTP/1.1\",\"headers\":[", g_har);
+    for (size_t i = 0; i < r->headers.count; i++) {
+        if (i) fputc(',', g_har);
+        fputs("{\"name\":", g_har);
+        har_str(g_har, r->headers.items[i].name, strlen(r->headers.items[i].name));
+        fputs(",\"value\":", g_har);
+        har_str(g_har, r->headers.items[i].value, strlen(r->headers.items[i].value));
+        fputc('}', g_har);
+    }
+    fputs("],\"content\":{\"size\":", g_har);
+    fprintf(g_har, "%zu,\"mimeType\":", r->body_len);
+    har_str(g_har, mime ? mime : "", mime ? strlen(mime) : 0);
+    int textual = mime && (strstr(mime, "text/") || strstr(mime, "json") ||
+                           strstr(mime, "xml") || strstr(mime, "javascript"));
+    if (textual && r->body && r->body_len <= 65536) {
+        fputs(",\"text\":", g_har);
+        har_str(g_har, (const char *)r->body, r->body_len);
+    }
+    fputs("},\"redirectURL\":\"\",\"headersSize\":-1,\"bodySize\":", g_har);
+    fprintf(g_har, "%zu},", r->body_len);
+    fprintf(g_har, "\"cache\":{},\"timings\":{\"send\":0,\"wait\":%ld,\"receive\":0}}",
+            elapsed_ms);
+}
+
 static int parse_args(int argc, char **argv, cube_opts_t *o,
                      const char **extra_headers, int *n_extra) {
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "-H") && i + 1 >= argc) { fprintf(stderr, "%scube: -H requires a value%s\n", col_red(), col_reset()); return -1; }
         const char *a = argv[i];
         if (!strcmp(a, "-h") || !strcmp(a, "--help")) { usage(argv[0]); exit(0); }
+        if (!strcmp(a, "--protocols")) {
+            const http_protocol_t *const *pp = http_protocol_all();
+            for (int k = 0; pp[k]; k++)
+                printf("%-8s transport=%-4s %s%s\n", pp[k]->name, pp[k]->transport,
+                       http_protocol_available(pp[k]->name) ? "available" : "registered (not wired)",
+                       (pp[k]->caps & HTTP_PCAP_EXPERIMENTAL) ? " [experimental]" : "");
+            exit(0);
+        }
+        if (!strcmp(a, "-I") || !strcmp(a, "--interactive")) { o->interactive = 1; continue; }
         if (!strcmp(a, "-v") || !strcmp(a, "--verbose")) { o->verbose = 1; continue; }
         if (!strcmp(a, "-q") || !strcmp(a, "--quiet"))   { o->quiet = 1; continue; }
         if (!strcmp(a, "--no-warnings"))  { o->no_warnings = 1; continue; }
@@ -707,6 +1061,32 @@ static int parse_args(int argc, char **argv, cube_opts_t *o,
         if (!strcmp(a, "--insecure"))     { o->insecure = 1; continue; }
         if (!strcmp(a, "--advisory"))     { o->advisory = 1; continue; }
         if (!strcmp(a, "--no-tls"))       { o->no_tls = 1; continue; }
+        if (!strcmp(a, "--no-decode"))    { o->no_decode = 1; continue; }
+        if (!strcmp(a, "--proxy")) {
+            if (i + 1 >= argc) { fprintf(stderr, "%scube: --proxy requires a value%s\n", col_red(), col_reset()); return -1; }
+            o->proxy = argv[++i]; continue;
+        }
+        if (!strcmp(a, "--no-proxy")) {
+            if (i + 1 >= argc) { fprintf(stderr, "%scube: --no-proxy requires a value%s\n", col_red(), col_reset()); return -1; }
+            o->no_proxy = argv[++i]; continue;
+        }
+        if (!strcmp(a, "--input")) {
+            if (i + 1 >= argc) { fprintf(stderr, "%scube: --input requires a value%s\n", col_red(), col_reset()); return -1; }
+            o->input_file = argv[++i]; continue;
+        }
+        if (!strcmp(a, "--har")) {
+            if (i + 1 >= argc) { fprintf(stderr, "%scube: --har requires a value%s\n", col_red(), col_reset()); return -1; }
+            o->har_path = argv[++i]; continue;
+        }
+        if (!strcmp(a, "--intercept")) {
+            o->intercept = 1;
+            if (i + 1 < argc && argv[i + 1][0] != '-' &&
+                (strstr(argv[i + 1], ".har") || strstr(argv[i + 1], ".json")))
+                o->har_path = argv[++i];
+            else if (!o->har_path)
+                o->har_path = "cube.har";
+            continue;
+        }
         if (!strcmp(a, "--http1"))        { o->force_http1 = 1; continue; }
         if (!strcmp(a, "--show-cert"))    { o->show_cert = 1; continue; }
         if (!strcmp(a, "--ja3"))          { o->show_ja3 = 1; continue; }
@@ -789,6 +1169,8 @@ static int parse_args(int argc, char **argv, cube_opts_t *o,
             o->line_end   = e;
             continue;
         }
+        if (!strcmp(a, "--check-json"))    { o->check_json = 1; continue; }
+        if (!strcmp(a, "--check-jsonc"))   { o->check_json = 2; continue; }
         if (!strcmp(a, "--raw"))           { o->raw = 1; continue; }
         if (!strcmp(a, "--cache"))         { o->cache = 1; continue; }
         if (!strcmp(a, "--cache-max-age") && i + 1 < argc) { o->cache_max_age = atoi(argv[++i]); continue; }
@@ -800,15 +1182,13 @@ static int parse_args(int argc, char **argv, cube_opts_t *o,
             extra_headers[(*n_extra)++] = argv[++i]; continue;
         }
         if (a[0] == '-') { fprintf(stderr, "%sunknown option %s%s\n", col_red(), a, col_reset()); return -1; }
-        if (o->n_urls < 32) {
-            o->urls[o->n_urls++] = a;
-            if (!o->url) o->url = a;
-        }
+        add_targets_text(o, a);
         continue;
         fprintf(stderr, "%sunexpected argument: %s%s\n", col_red(), a, col_reset());
         return -1;
     }
-    if (!o->url) { usage(argv[0]); return -1; }
+    if (o->input_file && load_targets_file(o, o->input_file) != 0) return -1;
+    if (!o->url && !o->check_json && !o->interactive) { usage(argv[0]); return -1; }
     return 0;
 }
 
@@ -1120,6 +1500,22 @@ static int fetch_response(const cube_opts_t *o, const char *url,
     if (port == 0) port = url_scheme_default_port(urlv.scheme, urlv.scheme_len);
     int is_tls = url_scheme_is_tls(urlv.scheme, urlv.scheme_len);
     if (o->no_tls) is_tls = 0;
+
+    proxy_config_t px;
+    memset(&px, 0, sizeof px);
+    int use_proxy = 0;
+    if (o->proxy) {
+        if (proxy_parse(&px, o->proxy) != 0) {
+            if (!o->quiet) fprintf(stderr, "%s[!] invalid proxy URL: %s%s\n",
+                                   col_red(), o->proxy, col_reset());
+            return 2;
+        }
+        proxy_set_no_proxy(&px, o->no_proxy);
+        use_proxy = !proxy_bypass(&px, host);
+        if (o->verbose)
+            fprintf(stderr, "%s[proxy]%s %s -> %s:%u%s\n", col_green(), col_reset(),
+                    use_proxy ? "using" : "bypassing", px.host, (unsigned)px.port, "");
+    }
     if (o->verbose)
         fprintf(stderr, "%s[url]%s host=%s port=%u path=%s scheme=%.*s\n",
                 col_bold(), col_reset(), host, port, path,
@@ -1131,29 +1527,31 @@ static int fetch_response(const cube_opts_t *o, const char *url,
     http_io_t io;
     memset(&io, 0, sizeof(io));
 
-    if (!o->no_reuse) {
+    if (!o->no_reuse && !use_proxy) {
         fd = reuse_lookup(host, port, is_tls, &tls);
         if (fd >= 0 && o->verbose)
             fprintf(stderr, "%s[tcp]%s reuse: hit %s:%u\n", col_green(), col_reset(), host, port);
     }
 
     if (fd < 0) {
+        const char *conn_host = use_proxy ? px.host : host;
+        uint16_t conn_port = use_proxy ? px.port : port;
         /* ---- 2. DNS ---- */
-        if (o->verbose) fprintf(stderr, "%s[dns]%s resolving %s ...\n", col_cyan(), col_reset(), host);
+        if (o->verbose) fprintf(stderr, "%s[dns]%s resolving %s ...\n", col_cyan(), col_reset(), conn_host);
         char ips[16][64];
         int  fams[16];
         size_t n_ips = 0;
         int  fam_pref = o->ipv4_only ? AF_INET : (o->ipv6_only ? AF_INET6 : AF_UNSPEC);
-        if (resolve_host_all(host, fam_pref, ips, fams, 16, &n_ips, o->debug) != 0 || n_ips == 0) {
+        if (resolve_host_all(conn_host, fam_pref, ips, fams, 16, &n_ips, o->debug) != 0 || n_ips == 0) {
             if (!o->quiet)
                 fprintf(stderr, "%s[!] dns: %s for '%s'%s\n",
-                        col_red(), dns_err_name(g_dns_last_err), host, col_reset());
+                        col_red(), dns_err_name(g_dns_last_err), conn_host, col_reset());
             if (o->verbose) fprintf(stderr, "    (dns error code %d)\n", g_dns_last_err);
             return 3;
         }
         if (o->verbose) {
             for (size_t _i = 0; _i < n_ips; _i++)
-                fprintf(stderr, "%s[dns]%s %s -> %s\n", col_cyan(), col_reset(), host, ips[_i]);
+                fprintf(stderr, "%s[dns]%s %s -> %s\n", col_cyan(), col_reset(), conn_host, ips[_i]);
         }
 
         /* ---- 3. TCP connect ---- */
@@ -1165,9 +1563,9 @@ static int fetch_response(const cube_opts_t *o, const char *url,
             if (o->verbose && _i > 0)
                 fprintf(stderr, "%s[dns]%s retrying %s (attempt %zu/%zu)\n", col_cyan(), col_reset(), ips[_i], _i + 1, n_ips);
             if (o->verbose)
-                fprintf(stderr, "%s[tcp]%s connecting %s:%u\n", col_green(), col_reset(), ips[_i], (unsigned)port);
+                fprintf(stderr, "%s[tcp]%s connecting %s:%u\n", col_green(), col_reset(), ips[_i], (unsigned)conn_port);
             long _t0 = cube_now_ms();
-            fd = tcp_connect(ips[_i], fams[_i], (uint16_t)port, per_attempt, tcp_err, sizeof tcp_err);
+            fd = tcp_connect(ips[_i], fams[_i], conn_port, per_attempt, tcp_err, sizeof tcp_err);
             if (fd >= 0) {
                 long _ms = cube_now_ms() - _t0;
                 if (o->verbose)
@@ -1182,6 +1580,20 @@ static int fetch_response(const cube_opts_t *o, const char *url,
                     tcp_err[0] ? tcp_err : strerror(errno),
                     col_reset());
             return 4;
+        }
+        if (use_proxy) {
+            char perr[256] = {0};
+            if (proxy_tunnel(&px, fd, host, port, (uint32_t)o->timeout_ms,
+                             perr, sizeof perr) != 0) {
+                if (!o->quiet)
+                    fprintf(stderr, "%s[!] %s%s\n", col_red(),
+                            perr[0] ? perr : "proxy tunnel failed", col_reset());
+                close(fd);
+                return 4;
+            }
+            if (o->verbose)
+                fprintf(stderr, "%s[proxy]%s tunnel established to %s:%u\n",
+                        col_green(), col_reset(), host, (unsigned)port);
         }
         {
             struct timeval tv;
@@ -1242,8 +1654,8 @@ static int fetch_response(const cube_opts_t *o, const char *url,
             crisptls_ctx_free(tls_ctx);
         }
 
-        /* Store for future reuse */
-        if (!o->no_reuse) reuse_store(host, port, is_tls, fd, tls);
+        /* Store for future reuse (proxied tunnels are single-use) */
+        if (!o->no_reuse && !use_proxy) reuse_store(host, port, is_tls, fd, tls);
     }
 
     if (is_tls) {
@@ -1264,6 +1676,8 @@ static int fetch_response(const cube_opts_t *o, const char *url,
     req.body_len  = o->data ? strlen(o->data) : 0;
     http_headers_init(&req.headers);
     http_headers_set(&req.headers, "User-Agent", o->user_agent ? o->user_agent : "cube/1.0");
+    http_headers_set(&req.headers, "Accept-Encoding",
+                     o->no_decode ? "identity" : "gzip, deflate");
     if (o->content_type)
         http_headers_set(&req.headers, "Content-Type", o->content_type);
     /* -H extra headers */
@@ -1287,6 +1701,7 @@ static int fetch_response(const cube_opts_t *o, const char *url,
     int rc = http_send_io(&io, host, port, is_tls ? "https" : "http", alpn, &req, resp);
     http_headers_free(&req.headers);
 
+    if (rc == 0 && !o->no_decode) decode_response(resp);
     if (rc != 0) {
         if (!o->quiet)
             fprintf(stderr, "%s[!] http failed: rc=%d%s\n", col_red(), rc, col_reset());
@@ -1379,11 +1794,18 @@ static int run_one(const cube_opts_t *o_in,
     int rc = 0;
 
     for (int hop = 0; hop <= 10; hop++) {
+        long t0 = cube_now_ms();
         rc = fetch_response(&o, o.url, extra_headers, n_extra, &resp, &tls, &fd);
         if (rc != 0) {
             /* fetch_response closed fd/tls on failure; just return */
             return rc;
         }
+        long elapsed = cube_now_ms() - t0;
+        if (g_har) har_record(o.url, o.method ? o.method : "GET", &resp, elapsed);
+        if (o.intercept)
+            fprintf(stderr, "%s[intercept]%s %s %s -> %d (%zu bytes, %ldms)\n",
+                    col_magenta(), col_reset(), o.method ? o.method : "GET",
+                    o.url, resp.status_code, resp.body_len, elapsed);
         /* Cache save on successful fetch */
         if (o.cache && resp.status_code >= 200 && resp.status_code < 300) {
             int ma = o.cache_max_age > 0 ? o.cache_max_age : 3600;
@@ -1480,6 +1902,348 @@ static const char *cube_repo_path(const char *rel, char *buf, size_t cap) {
     snprintf(buf, cap, "%s", rel);
     return buf;
 }
+static int run_json_check(const cube_opts_t *o) {
+    const char *path = o->n_urls > 0 ? o->urls[0] : NULL;
+    FILE *f = path ? fopen(path, "rb") : stdin;
+    if (!f) {
+        fprintf(stderr, "%scube: cannot open %s: %s%s\n",
+                col_red(), path, strerror(errno), col_reset());
+        return 1;
+    }
+    size_t cap = 8192, len = 0;
+    char *buf = (char *)malloc(cap);
+    if (!buf) { if (f != stdin) fclose(f); return 1; }
+    for (;;) {
+        if (len + 4096 + 1 > cap) {
+            if (cap >= 256u * 1024u * 1024u) {
+                fprintf(stderr, "%scube: input too large%s\n", col_red(), col_reset());
+                free(buf); if (f != stdin) fclose(f); return 1;
+            }
+            size_t ncap = cap * 2;
+            char *nb = (char *)realloc(buf, ncap);
+            if (!nb) { free(buf); if (f != stdin) fclose(f); return 1; }
+            buf = nb; cap = ncap;
+        }
+        size_t n = fread(buf + len, 1, cap - len - 1, f);
+        len += n;
+        if (n == 0) break;
+    }
+    int bad = ferror(f);
+    if (f != stdin) fclose(f);
+    if (bad) { free(buf); fprintf(stderr, "%scube: read error%s\n", col_red(), col_reset()); return 1; }
+
+    json_error_t e;
+    int ok = json_validate(buf, len, o->check_json == 2, &e);
+    if (ok == 0) {
+        printf("%s: valid %s\n", path ? path : "<stdin>",
+               o->check_json == 2 ? "JSONC" : "JSON");
+    } else {
+        fprintf(stderr, "%s:%d:%d: %s (byte %zu)\n",
+                path ? path : "<stdin>", e.line, e.column, e.message, e.offset);
+    }
+    free(buf);
+    return ok == 0 ? 0 : 1;
+}
+
+/* ---- Interactive REPL ---- */
+
+#define CUBE_REPL_MAX_HEADERS 16
+#define CUBE_REPL_HEADER_MAX  1024
+
+typedef struct {
+    cube_opts_t opts;
+    char profile[128];
+    char method[32];
+    char user_agent[512];
+    char header_store[CUBE_REPL_MAX_HEADERS][CUBE_REPL_HEADER_MAX];
+    const char *headers[CUBE_REPL_MAX_HEADERS];
+    int n_headers;
+} cube_repl_t;
+
+static int repl_ci_eq(const char *a, const char *b) {
+    while (*a && *b) {
+        unsigned char ca = (unsigned char)*a++;
+        unsigned char cb = (unsigned char)*b++;
+        if (ca >= 'A' && ca <= 'Z') ca = (unsigned char)(ca - 'A' + 'a');
+        if (cb >= 'A' && cb <= 'Z') cb = (unsigned char)(cb - 'A' + 'a');
+        if (ca != cb) return 0;
+    }
+    return *a == '\0' && *b == '\0';
+}
+
+static char *repl_trim(char *s) {
+    while (*s && isspace((unsigned char)*s)) s++;
+    char *e = s + strlen(s);
+    while (e > s && isspace((unsigned char)e[-1])) *--e = '\0';
+    return s;
+}
+
+static char *repl_split(char *s, char **rest) {
+    s = repl_trim(s);
+    if (!*s) { *rest = s; return s; }
+    char *tok = s;
+    while (*s && !isspace((unsigned char)*s)) s++;
+    if (*s) *s++ = '\0';
+    *rest = repl_trim(s);
+    return tok;
+}
+
+static int repl_bool(const char *v, int *out) {
+    if (!v || !*v) { *out = 1; return 0; }
+    if (repl_ci_eq(v, "1") || repl_ci_eq(v, "on") ||
+        repl_ci_eq(v, "true") || repl_ci_eq(v, "yes")) {
+        *out = 1;
+        return 0;
+    }
+    if (repl_ci_eq(v, "0") || repl_ci_eq(v, "off") ||
+        repl_ci_eq(v, "false") || repl_ci_eq(v, "no")) {
+        *out = 0;
+        return 0;
+    }
+    return -1;
+}
+
+static void repl_print_help(void) {
+    printf("commands:\n"
+           "  help                    show this help\n"
+           "  get <url>               fetch a URL with the current settings\n"
+           "  set <key> <value>       change a setting\n"
+           "  unset <key>             reset raw, color, quiet, or verbose\n"
+           "  show                    print current settings\n"
+           "  quit | exit             leave interactive mode\n"
+           "\n"
+           "set keys: profile, timeout, method, user-agent, header,\n"
+           "          raw, color, follow, quiet, verbose\n"
+           "  header takes a value like \"Name: value\"\n"
+           "  booleans accept on/off, true/false, yes/no, 1/0\n"
+           "  color accepts auto, on/force, off/never\n");
+}
+
+static const char *repl_onoff(int v) {
+    return v ? "on" : "off";
+}
+
+static void repl_show(const cube_repl_t *st) {
+    const cube_opts_t *o = &st->opts;
+    const char *color = o->color_mode == 1 ? "on"
+                      : o->color_mode == 2 ? "off" : "auto";
+    printf("profile: %s\n", o->profile ? o->profile : "(default)");
+    printf("timeout: %d ms\n", o->timeout_ms);
+    printf("method: %s\n", o->method ? o->method : "(default)");
+    printf("user-agent: %s\n", o->user_agent ? o->user_agent : "(default)");
+    for (int i = 0; i < st->n_headers; i++)
+        printf("header: %s\n", st->headers[i]);
+    printf("raw: %s\n", repl_onoff(o->raw));
+    printf("color: %s\n", color);
+    printf("follow: %s\n", repl_onoff(o->follow));
+    printf("quiet: %s\n", repl_onoff(o->quiet));
+    printf("verbose: %s\n", repl_onoff(o->verbose));
+}
+
+static int repl_set(cube_repl_t *st, char *rest) {
+    char *value = NULL;
+    char *key = repl_split(rest, &value);
+    cube_opts_t *o = &st->opts;
+
+    if (!*key) {
+        fprintf(stderr, "%scube: set requires a key and value%s\n", col_red(), col_reset());
+        return 1;
+    }
+    if (repl_ci_eq(key, "profile")) {
+        if (!*value) goto missing;
+        snprintf(st->profile, sizeof st->profile, "%s", value);
+        o->profile = st->profile;
+        return 0;
+    }
+    if (repl_ci_eq(key, "timeout")) {
+        if (!*value) goto missing;
+        char *end = NULL;
+        long n = strtol(value, &end, 10);
+        if (!end || *end || n < 0 || n > 2147483647L) {
+            fprintf(stderr, "%scube: timeout must be a non-negative integer (ms)%s\n",
+                    col_red(), col_reset());
+            return 1;
+        }
+        o->timeout_ms = (int)n;
+        return 0;
+    }
+    if (repl_ci_eq(key, "method")) {
+        if (!*value) goto missing;
+        snprintf(st->method, sizeof st->method, "%s", value);
+        o->method = st->method;
+        return 0;
+    }
+    if (repl_ci_eq(key, "user-agent")) {
+        if (!*value) goto missing;
+        snprintf(st->user_agent, sizeof st->user_agent, "%s", value);
+        o->user_agent = st->user_agent;
+        return 0;
+    }
+    if (repl_ci_eq(key, "header")) {
+        if (!*value) goto missing;
+        if (!strchr(value, ':')) {
+            fprintf(stderr, "%scube: header must be \"Name: value\"%s\n",
+                    col_red(), col_reset());
+            return 1;
+        }
+        if (st->n_headers >= CUBE_REPL_MAX_HEADERS) {
+            fprintf(stderr, "%scube: too many headers (max %d)%s\n",
+                    col_red(), CUBE_REPL_MAX_HEADERS, col_reset());
+            return 1;
+        }
+        if (strlen(value) >= sizeof st->header_store[0]) {
+            fprintf(stderr, "%scube: header too long%s\n", col_red(), col_reset());
+            return 1;
+        }
+        snprintf(st->header_store[st->n_headers], sizeof st->header_store[0], "%s", value);
+        st->headers[st->n_headers] = st->header_store[st->n_headers];
+        st->n_headers++;
+        return 0;
+    }
+    if (repl_ci_eq(key, "raw")) {
+        int v;
+        if (repl_bool(value, &v) != 0) goto badbool;
+        o->raw = v;
+        return 0;
+    }
+    if (repl_ci_eq(key, "follow")) {
+        int v;
+        if (repl_bool(value, &v) != 0) goto badbool;
+        o->follow = v;
+        return 0;
+    }
+    if (repl_ci_eq(key, "quiet")) {
+        int v;
+        if (repl_bool(value, &v) != 0) goto badbool;
+        o->quiet = v;
+        return 0;
+    }
+    if (repl_ci_eq(key, "verbose")) {
+        int v;
+        if (repl_bool(value, &v) != 0) goto badbool;
+        o->verbose = v;
+        return 0;
+    }
+    if (repl_ci_eq(key, "color")) {
+        if (!*value) { o->color_mode = 1; return 0; }
+        if (repl_ci_eq(value, "auto")) { o->color_mode = 0; return 0; }
+        if (repl_ci_eq(value, "on") || repl_ci_eq(value, "force") ||
+            repl_ci_eq(value, "true") || repl_ci_eq(value, "yes") ||
+            repl_ci_eq(value, "1")) {
+            o->color_mode = 1;
+            return 0;
+        }
+        if (repl_ci_eq(value, "off") || repl_ci_eq(value, "never") ||
+            repl_ci_eq(value, "false") || repl_ci_eq(value, "no") ||
+            repl_ci_eq(value, "0")) {
+            o->color_mode = 2;
+            return 0;
+        }
+        goto badbool;
+    }
+
+    fprintf(stderr, "%scube: unknown set key '%s' (try 'help')%s\n",
+            col_red(), key, col_reset());
+    return 1;
+
+missing:
+    fprintf(stderr, "%scube: set %s requires a value%s\n", col_red(), key, col_reset());
+    return 1;
+badbool:
+    fprintf(stderr, "%scube: invalid boolean value for %s%s\n", col_red(), key, col_reset());
+    return 1;
+}
+
+static int repl_unset(cube_repl_t *st, char *rest) {
+    char *value = NULL;
+    char *key = repl_split(rest, &value);
+    (void)value;
+    cube_opts_t *o = &st->opts;
+
+    if (!*key) {
+        fprintf(stderr, "%scube: unset requires a key%s\n", col_red(), col_reset());
+        return 1;
+    }
+    if (repl_ci_eq(key, "raw")) { o->raw = 0; return 0; }
+    if (repl_ci_eq(key, "color")) { o->color_mode = 0; return 0; }
+    if (repl_ci_eq(key, "quiet")) { o->quiet = 0; return 0; }
+    if (repl_ci_eq(key, "verbose")) { o->verbose = 0; return 0; }
+    fprintf(stderr, "%scube: cannot unset '%s' (try raw, color, quiet, verbose)%s\n",
+            col_red(), key, col_reset());
+    return 1;
+}
+
+static int run_interactive(cube_opts_t *o_in,
+                           const char **initial_headers, int n_initial) {
+    cube_repl_t st;
+    memset(&st, 0, sizeof st);
+    st.opts = *o_in;
+    for (int i = 0; i < n_initial && i < CUBE_REPL_MAX_HEADERS; i++) {
+        snprintf(st.header_store[st.n_headers], sizeof st.header_store[0],
+                 "%s", initial_headers[i]);
+        st.headers[st.n_headers] = st.header_store[st.n_headers];
+        st.n_headers++;
+    }
+
+    int status = 0;
+    int tty = isatty(0);
+    char line[8192];
+
+    for (;;) {
+        if (tty) {
+            fputs("cube> ", stdout);
+            fflush(stdout);
+        }
+        if (!fgets(line, sizeof line, stdin)) {
+            if (tty) fputc('\n', stdout);
+            break;
+        }
+        size_t len = strlen(line);
+        if (len == sizeof line - 1 && line[len - 1] != '\n') {
+            int c;
+            while ((c = getchar()) != '\n' && c != EOF) {}
+        }
+        while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r'))
+            line[--len] = '\0';
+
+        char *s = repl_trim(line);
+        if (!*s || *s == '#') continue;
+
+        char *rest = NULL;
+        char *cmd = repl_split(s, &rest);
+
+        if (repl_ci_eq(cmd, "help")) {
+            repl_print_help();
+            status = 0;
+        } else if (repl_ci_eq(cmd, "show")) {
+            repl_show(&st);
+            status = 0;
+        } else if (repl_ci_eq(cmd, "get")) {
+            if (!*rest) {
+                fprintf(stderr, "%scube: get requires a URL%s\n", col_red(), col_reset());
+                status = 1;
+            } else {
+                st.opts.url = normalize_url(rest);
+                status = run_one(&st.opts, st.headers, st.n_headers);
+                reuse_cleanup();
+                fflush(stdout);
+                fflush(stderr);
+            }
+        } else if (repl_ci_eq(cmd, "set")) {
+            status = repl_set(&st, rest);
+        } else if (repl_ci_eq(cmd, "unset")) {
+            status = repl_unset(&st, rest);
+        } else if (repl_ci_eq(cmd, "quit") || repl_ci_eq(cmd, "exit")) {
+            break;
+        } else {
+            fprintf(stderr, "%scube: unknown command '%s' (try 'help')%s\n",
+                    col_red(), cmd, col_reset());
+            status = 1;
+        }
+    }
+    return status;
+}
+
 int main(int argc, char **argv) {
     g_argv0 = argc > 0 ? argv[0] : "cube";
 #ifdef _WIN32
@@ -1506,7 +2270,10 @@ int main(int argc, char **argv) {
     if (o.trace) { o.debug = 1; o.verbose = 1; }
     if (o.debug) o.verbose = 1;
     apply_runtime_opts(&o);
+    if (o.check_json) return run_json_check(&o);
     { char _sp[1024]; url_schemes_load(cube_repo_path("flywheel/url/data/scheme_ports.conf", _sp, sizeof _sp)); }
+    { char _pp[1024]; crisptls_profile_load_file(cube_repo_path("net/crisptls/data/profiles.conf", _pp, sizeof _pp)); }
+    if (o.interactive) return run_interactive(&o, extra_headers, n_extra);
 
     if (o.n_urls == 0) {
         usage(argv[0]);
@@ -1518,6 +2285,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    if (o.har_path) har_begin(o.har_path);
     int final_rc = 0;
     for (int i = 0; i < o.n_urls; i++) {
         const char *norm = normalize_url(o.urls[i]);
@@ -1542,5 +2310,6 @@ int main(int argc, char **argv) {
         fflush(stderr);
         if (rc != 0 && final_rc == 0) final_rc = rc;
     }
+    har_end();
     return final_rc;
 }

@@ -52,6 +52,11 @@ tests/fuzz/logs/
 /fuzz-all.sh
 
 # Test artifacts
+.tmp_*.log
+tests/ch_dump.bin
+tests/sh_dump.bin
+tests/duck_dump.txt
+tests/debug/duck_dump.txt
 tests/.results/
 tests/**/build/
 net/crisptls/build/test_*

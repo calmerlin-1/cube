@@ -53,7 +53,7 @@ static void usage(const char *p) {
 "usage: %s [tls-flags] <host>[:port]\n"
 "\n"
 "TLS policy:\n"
-"  --profile NAME           chrome-120 | firefox-121 | curl-8\n"
+"  --profile NAME           chrome-120|firefox-121|curl-8|chrome-131|firefox-133|edge-120|safari-17\n"
 "  --min-version V          ssl3 | tls10 | tls11 | tls12 | tls13\n"
 "  --max-version V          ssl3 | tls10 | tls11 | tls12 | tls13\n"
 "  --alpn LIST              comma-separated (default: http/1.1)\n"
