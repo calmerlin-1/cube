@@ -215,6 +215,41 @@ static Value el_set_text(Interp *I, Value this_val, Value *args, int argc) {
     return val_undefined();
 }
 
+static Value el_set_id_prop(Interp *I, Value this_val, Value *args, int argc) {
+    html_node_t *n = unwrap_node(this_val);
+    const char *s = argc > 0 ? val_as_cstr(args[0]) : NULL;
+    if (n && s) dom_set_id(get_doc(I), n, s);
+    return argc > 0 ? args[0] : val_undefined();
+}
+
+static Value el_get_class_prop(Interp *I, Value this_val, Value *args, int argc) {
+    (void)I; (void)args; (void)argc;
+    html_node_t *n = unwrap_node(this_val);
+    const char *s = n ? dom_get_attribute(n, "class") : NULL;
+    return val_string(s ? s : "");
+}
+
+static Value el_set_class_prop(Interp *I, Value this_val, Value *args, int argc) {
+    html_node_t *n = unwrap_node(this_val);
+    const char *s = argc > 0 ? val_as_cstr(args[0]) : NULL;
+    if (n) dom_set_attribute(get_doc(I), n, "class", s ? s : "");
+    return argc > 0 ? args[0] : val_undefined();
+}
+
+static Value el_get_value_prop(Interp *I, Value this_val, Value *args, int argc) {
+    (void)I; (void)args; (void)argc;
+    html_node_t *n = unwrap_node(this_val);
+    const char *s = n ? dom_get_attribute(n, "value") : NULL;
+    return val_string(s ? s : "");
+}
+
+static Value el_set_value_prop(Interp *I, Value this_val, Value *args, int argc) {
+    html_node_t *n = unwrap_node(this_val);
+    const char *s = argc > 0 ? val_as_cstr(args[0]) : NULL;
+    if (n) dom_set_attribute(get_doc(I), n, "value", s ? s : "");
+    return argc > 0 ? args[0] : val_undefined();
+}
+
 static Value el_tag_name(Interp *I, Value this_val, Value *args, int argc) {
     (void)I; (void)args; (void)argc;
     html_node_t *n = unwrap_node(this_val);
@@ -480,6 +515,16 @@ void dom_js_attach_element_methods(Interp *I, Object *o) {
     object_set(I, o, "tagName",     el_tag_name(I, tv, NULL, 0));
     object_set(I, o, "id",          el_get_id(I, tv, NULL, 0));
     object_set(I, o, "textContent", el_get_text(I, tv, NULL, 0));
+
+    /* Live properties: reads and writes go through the DOM. */
+    object_set_getter(I, o, "textContent", el_get_text);
+    object_set_setter(I, o, "textContent", el_set_text);
+    object_set_getter(I, o, "id",          el_get_id);
+    object_set_setter(I, o, "id",          el_set_id_prop);
+    object_set_getter(I, o, "className",   el_get_class_prop);
+    object_set_setter(I, o, "className",   el_set_class_prop);
+    object_set_getter(I, o, "value",       el_get_value_prop);
+    object_set_setter(I, o, "value",       el_set_value_prop);
 }
 
 void dom_js_install(Interp *I, html_document_t *doc) {

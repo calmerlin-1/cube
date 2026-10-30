@@ -36,6 +36,9 @@
     #define cube_poll               WSAPoll
     #define POLLIN                  POLLRDNORM
     #define POLLOUT                 POLLWRNORM
+    #define SHUT_WR                 SD_SEND
+    #define SHUT_RD                 SD_RECEIVE
+    #define SHUT_RDWR               SD_BOTH
 
     /* errno mapping */
     #define cube_errno              WSAGetLastError()
@@ -69,6 +72,17 @@
     #define cube_socket_err_is_eagain(e)    ((e) == EAGAIN || (e) == EWOULDBLOCK)
     #define cube_socket_err_str(e)          strerror(e)
 #endif
+/* Windows takes char* option buffers and int lengths. */
+#ifdef _WIN32
+#define cube_setsockopt(fd,lvl,opt,val,len) \
+    setsockopt((fd),(lvl),(opt),(const char *)(val),(int)(len))
+#define cube_getsockopt(fd,lvl,opt,val,len) \
+    getsockopt((fd),(lvl),(opt),(char *)(val),(int *)(len))
+#else
+#define cube_setsockopt setsockopt
+#define cube_getsockopt getsockopt
+#endif
+
 /* portable errno helpers */
 #ifdef _WIN32
 static int  cube_set_nonblock(int fd, int on) { u_long m = on?1:0; return ioctlsocket(fd, FIONBIO, &m); }
@@ -216,11 +230,11 @@ int tcp_connect(const char *ip, int family, uint16_t port,
     /* Sensible defaults. Callers may override via tcp_set_* afterwards,
      * but these get used during connect. */
     int one = 1;
-    if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof one) < 0) {
+    if (cube_setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof one) < 0) {
         set_err(err, err_cap, "setsockopt TCP_NODELAY: %s", cube_socket_err_str(cube_errno));
         cube_close(fd); return -1;
     }
-    if (setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &one, sizeof one) < 0) {
+    if (cube_setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &one, sizeof one) < 0) {
         set_err(err, err_cap, "setsockopt SO_KEEPALIVE: %s", cube_socket_err_str(cube_errno));
         cube_close(fd); return -1;
     }
@@ -245,7 +259,7 @@ int tcp_connect(const char *ip, int family, uint16_t port,
             cube_close(fd); return -1;
         }
         int soerr = 0; socklen_t solen = sizeof soerr;
-        if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &soerr, &solen) < 0 || soerr != 0) {
+        if (cube_getsockopt(fd, SOL_SOCKET, SO_ERROR, &soerr, &solen) < 0 || soerr != 0) {
             cube_set_errno(soerr);
             set_err(err, err_cap, "connect: %s", cube_socket_err_str(cube_errno));
             cube_close(fd); return -1;
@@ -264,24 +278,24 @@ int tcp_connect(const char *ip, int family, uint16_t port,
 /* tuning */
 
 int tcp_set_nodelay(int fd, int on) {
-    return setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof on);
+    return cube_setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof on);
 }
 int tcp_set_keepalive(int fd, int on) {
-    return setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &on, sizeof on);
+    return cube_setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &on, sizeof on);
 }
 int tcp_set_nonblocking(int fd, int on) {
     return cube_set_nonblock(fd, on ? 1 : 0);
 }
 int tcp_set_rcvbuf(int fd, int bytes) {
     if (bytes < 0) { cube_set_errno_inval(); return -1; }
-    return setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &bytes, sizeof bytes);
+    return cube_setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &bytes, sizeof bytes);
 }
 int tcp_set_sndbuf(int fd, int bytes) {
     if (bytes < 0) { cube_set_errno_inval(); return -1; }
-    return setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &bytes, sizeof bytes);
+    return cube_setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &bytes, sizeof bytes);
 }
 int tcp_set_reuseaddr(int fd, int on) {
-    return setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof on);
+    return cube_setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof on);
 }
 
 /* I/O */

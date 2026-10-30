@@ -27,6 +27,12 @@ TCP_LIB        = net/tcp/build/libtcp.a
 TCP_INC        = net/tcp/include
 PROXY_LIB      = net/proxy/build/libproxy.a
 PROXY_INC      = net/proxy/include
+BROWSER_LIB    = net/browser/build/libbrowser.a
+BROWSER_INC    = net/browser/include
+NATIVE_BROWSER_LIB = flywheel/browser/build/libbrowser_native.a
+NATIVE_BROWSER_INC = flywheel/browser/include
+JS_LIB         = flywheel/js/build/libjs.a
+JS_INC         = flywheel/js/include
 HTTP_LIB       = net/http_client/build/libhttp_client.a
 HTTP_INC       = net/http_client/include
 URL_LIB        = flywheel/url/build/liburl.a
@@ -42,11 +48,28 @@ JSON_INC       = flywheel/json/include
 UTILS_LIB      = utils/build/libutils.a
 UTILS_INC      = utils
 
+# libsodium discovery: pkg-config first, then Homebrew (macOS ARM/Intel).
+SODIUM_CFLAGS := $(shell pkg-config --cflags libsodium 2>/dev/null)
+SODIUM_LIBS   := $(shell pkg-config --libs libsodium 2>/dev/null)
+ifeq ($(strip $(SODIUM_LIBS)),)
+  SODIUM_PREFIX := $(shell brew --prefix libsodium 2>/dev/null)
+  ifneq ($(strip $(SODIUM_PREFIX)),)
+    SODIUM_CFLAGS = -I$(SODIUM_PREFIX)/include
+    SODIUM_LIBS   = -L$(SODIUM_PREFIX)/lib -lsodium
+  else
+    SODIUM_LIBS   = -lsodium
+  endif
+endif
+
 CFLAGS = -O1 -I. -Iutils -Wall -Wextra $(ZLIB_CFLAGS) $(PTHREAD_CFLAGS) \
+         $(SODIUM_CFLAGS) \
          -I$(CRISPTLS_INC) \
          -I$(DNS_INC) \
          -I$(TCP_INC) \
          -I$(PROXY_INC) \
+         -I$(BROWSER_INC) \
+         -I$(NATIVE_BROWSER_INC) \
+         -I$(JS_INC) \
          -I$(HTTP_INC) \
          -I$(URL_INC) \
          -I$(JSON_INC) \
@@ -55,11 +78,15 @@ CFLAGS = -O1 -I. -Iutils -Wall -Wextra $(ZLIB_CFLAGS) $(PTHREAD_CFLAGS) \
 	         -I$(CSS_INC) \
          -I$(UTILS_INC)
 
-LIBS   = -lsodium $(ZLIB_LIBS) $(PTHREAD_LIBS)
+LIBS   = $(SODIUM_LIBS) $(ZLIB_LIBS) $(PTHREAD_LIBS) -lm
+ifeq ($(OS),Windows_NT)
+  LIBS += -lpsapi
+endif
 
 # Every subdir with a Makefile. Order matters for cross-subdir deps.
-SUBDIRS = utils flywheel/json flywheel/css flywheel/url flywheel/html flywheel/dom \
-          net/proxy net/tcp net/dns net/crisptls net/http_client
+SUBDIRS = utils flywheel/json flywheel/css flywheel/url flywheel/html flywheel/js \
+          flywheel/dom flywheel/browser \
+          net/proxy net/browser net/tcp net/dns net/crisptls net/http_client
 
 CUBE   = cube
 
@@ -90,17 +117,20 @@ libs:
 	done
 	@echo "  all libs built"
 
-$(CUBE): libs src/cube.c $(CRISPTLS_LIB) $(DNS_LIB) $(TCP_LIB) $(PROXY_LIB) $(HTTP_LIB) $(URL_LIB) $(HTML_LIB) $(DOM_LIB) $(CSS_LIB) $(JSON_LIB) $(UTILS_LIB)
+$(CUBE): libs src/cube.c $(CRISPTLS_LIB) $(DNS_LIB) $(TCP_LIB) $(PROXY_LIB) $(BROWSER_LIB) $(NATIVE_BROWSER_LIB) $(HTTP_LIB) $(URL_LIB) $(HTML_LIB) $(DOM_LIB) $(CSS_LIB) $(JS_LIB) $(JSON_LIB) $(UTILS_LIB)
 	$(CC) $(CFLAGS) src/cube.c \
 	    $(HTTP_LIB) \
 	    $(CRISPTLS_LIB) \
 	    $(DNS_LIB) \
 	    $(PROXY_LIB) \
+	    $(BROWSER_LIB) \
 	    $(TCP_LIB) \
 	    $(URL_LIB) \
+	    $(NATIVE_BROWSER_LIB) \
             $(HTML_LIB) \
 	         $(DOM_LIB) \
 	         $(CSS_LIB) \
+	         $(JS_LIB) \
             $(JSON_LIB) \
 	    $(UTILS_LIB) \
 	    $(LIBS) -s -o $@

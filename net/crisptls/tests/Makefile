@@ -14,7 +14,8 @@ INC     := -I$(ROOT)/net/crisptls/include \
 CFLAGS  ?= -O2 -Wall -Wextra -g $(INC)
 LIBS    := $(LIB) -lsodium
 
-TESTS   := test_fe test_hmac_native test_p256 test_sha_edge test_sha_native
+TESTS   := test_fe test_hmac_native test_p256 test_p384 test_rsa_sha384 \
+           test_sha_edge test_sha_native
 BINS    := $(addprefix $(BUILD)/,$(TESTS))
 
 .PHONY: all test run clean

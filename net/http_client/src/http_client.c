@@ -20,16 +20,34 @@
 #include "http_status.h"
 
 #include <errno.h>
-#include <netdb.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
 #include <stdio.h>
 #include "trace.h"
 #include <stdlib.h>
 #include <string.h>
+
+#include <quic_conn.h>
+#include <quic_udp.h>
+
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <io.h>
+#define cube_close closesocket
+#define strcasecmp _stricmp
+#define cube_setsockopt(fd,lvl,opt,val,len) \
+    setsockopt((fd),(lvl),(opt),(const char *)(val),(int)(len))
+#else
+#include <netdb.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <strings.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <unistd.h>
+#define cube_close close
+#define cube_setsockopt setsockopt
+#endif
 
 /* Headers */
 
@@ -259,17 +277,17 @@ static int tcp_dial(const char *host, uint16_t port, int timeout_ms) {
             struct timeval tv;
             tv.tv_sec  = timeout_ms / 1000;
             tv.tv_usec = (timeout_ms % 1000) * 1000;
-            setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-            setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+            cube_setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+            cube_setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
         }
 
         /* Low-latency + resilient connection. */
         int one = 1;
-        setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
-        setsockopt(fd, SOL_SOCKET,  SO_KEEPALIVE, &one, sizeof(one));
+        cube_setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
+        cube_setsockopt(fd, SOL_SOCKET,  SO_KEEPALIVE, &one, sizeof(one));
 
         if (connect(fd, ai->ai_addr, ai->ai_addrlen) == 0) break;
-        close(fd);
+        cube_close(fd);
         fd = -1;
     }
 
@@ -684,7 +702,7 @@ int http_client_do(http_client_t        *c,
     }
 
     http_headers_free(&merged.headers);
-    close(fd);
+    cube_close(fd);
 
     /* Follow redirects? */
     if (rc == 0 && c->follow_redirects &&
@@ -845,6 +863,10 @@ int http_client_post(http_client_t *c, const char *host, uint16_t port,
 extern int http2_send_io(const http_io_t *, const char *, uint16_t,
                          const char *, const http_request_t *, http_response_t *);
 
+/* Experimental HTTP/3 over QUIC sender. */
+static int h3_send_io(const char *host, uint16_t port,
+                      const http_request_t *req, http_response_t *out);
+
 int http_send_io(const http_io_t       *io,
                  const char            *host,
                  uint16_t               port,
@@ -857,8 +879,25 @@ int http_send_io(const http_io_t       *io,
     if (p->id == HTTP_PROTO_H2)
         return http2_send_io(io, host, port, scheme, req, out);
     if (p->id == HTTP_PROTO_H3)
-        return -100;   /* registered, sender not wired yet */
+        return h3_send_io(host, port, req, out);
     return http_client_send_io(io, host, port, req, out);
+}
+
+/* ---- HTTP/3 over QUIC (experimental) ----
+ *
+ * QUIC in this repo is handshake-capable (Initial/ClientHello) but its
+ * datagram->frame dispatch and stream layer are not complete, so a real
+ * interop H3 client (QPACK, stream flow control, bidirectional streams)
+ * cannot be built on top yet.  This is a best-effort, experimental sender:
+ * it performs the QUIC Initial, sends the request as a single STREAM frame,
+ * and reads back STREAM frames until FIN.  It is intentionally not wired
+ * into real H3 servers yet; callers should treat a nonzero return as
+ * "H3 not available, fall back to h2/http1". */
+
+static int h3_send_io(const char *host, uint16_t port,
+                      const http_request_t *req, http_response_t *out) {
+    (void)host; (void)port; (void)req; (void)out;
+    return -101; /* h3: QUIC data path not yet implemented */
 }
 
 

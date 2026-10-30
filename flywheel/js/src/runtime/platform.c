@@ -8,6 +8,11 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#if defined(_WIN32)
+  #include <windows.h>
+  #include <psapi.h>
+#endif
+
 #if defined(__linux__) || defined(__ANDROID__)
   #include <sys/auxv.h>
   #include <unistd.h>

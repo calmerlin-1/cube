@@ -15,8 +15,14 @@ OBJS = $(patsubst src/%.c, build/%.o, $(SRCS))
 
 LIB = build/libhttp_client.a
 
-CFLAGS ?= -O2 -I../../utils -I../.. -Wall -Wextra -Iinclude -Isrc/http2
-LIBS   =
+CFLAGS ?= -O2 -I../../utils -I../.. -Wall -Wextra -Iinclude -Isrc/http2 \
+          -I../quic/include -I../../net/crisptls/include \
+          -I../../net/crisptls/src/crypto -I../../net/crisptls/src/runtime \
+          -I../../net/crisptls/src/session -I../../net/crisptls/src/proto/handshake \
+          -I../../net/crisptls/src/proto/keyschedule -I../../net/crisptls/src/proto/record \
+          -I../../net/crisptls/src/proto/state -I../../net/crisptls/src/proto/extensions \
+          -I../../net/crisptls/src/policy -I../../net/crisptls/src/policy/profiles
+LIBS   = -lsodium
 
 .PHONY: all clean info test
 

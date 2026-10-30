@@ -12,9 +12,12 @@ LIBS   = -lm
 
 ENGINE = $(OBJS)
 
-.PHONY: all clean baseline bench bench_cached targeted vulnfuzz
+.PHONY: all tools clean baseline bench bench_cached targeted vulnfuzz
 
-all: build/bench build/bench_cached build/targeted build/vulnfuzz build/bench_baseline build/profile build/libjs.a
+# Default target is the library only; benchmarks/tools stay opt-in so a
+# plain `make` works on every platform (including Windows/MinGW).
+all: build/libjs.a
+tools: build/bench build/bench_cached build/targeted build/vulnfuzz build/bench_baseline build/profile
 
 build/libjs.a: $(ENGINE)
 	@mkdir -p build

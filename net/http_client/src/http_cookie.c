@@ -12,6 +12,40 @@
 #include <string.h>
 #include <time.h>
 
+#ifdef _WIN32
+#include <ctype.h>
+#define strncasecmp _strnicmp
+/* Minimal RFC 1123 parser for cookie Expires (MinGW has no strptime). */
+static char *cube_strptime(const char *s, const char *fmt, struct tm *tm) {
+    (void)fmt;
+    while (*s && *s != ',') s++;
+    if (*s == ',') s++;
+    while (*s == ' ') s++;
+    char mon[8] = {0};
+    int d = 0, y = 0, H = 0, M = 0, S = 0;
+    if (sscanf(s, "%d %7s %d %d:%d:%d", &d, mon, &y, &H, &M, &S) != 6)
+        return NULL;
+    static const char *months[] = {
+        "Jan","Feb","Mar","Apr","May","Jun",
+        "Jul","Aug","Sep","Oct","Nov","Dec"
+    };
+    int mi = -1;
+    for (int i = 0; i < 12; i++)
+        if (!_stricmp(mon, months[i])) { mi = i; break; }
+    if (mi < 0) return NULL;
+    memset(tm, 0, sizeof(*tm));
+    tm->tm_mday = d;
+    tm->tm_mon = mi;
+    tm->tm_year = y - 1900;
+    tm->tm_hour = H;
+    tm->tm_min = M;
+    tm->tm_sec = S;
+    return (char *)s;
+}
+#define strptime cube_strptime
+#define timegm _mkgmtime
+#endif
+
 /* ---- lifecycle ---- */
 
 void http_cookie_jar_init(http_cookie_jar_t *j) {

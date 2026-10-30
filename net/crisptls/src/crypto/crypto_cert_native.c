@@ -49,7 +49,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <unistd.h>
+#endif
 
 /* 16 is far above any real chain (2-4 certs). Caps stack use against a
  * malicious server sending a huge chain. */
@@ -83,11 +87,19 @@ static const char *find_ca_bundle(const char *override) {
 
     {
         char exe[1024];
+#ifdef _WIN32
+        DWORD n = GetModuleFileNameA(NULL, exe, (DWORD)sizeof exe - 1);
+#else
         ssize_t n = readlink("/proc/self/exe", exe, sizeof exe - 1);
+#endif
         if (n > 0) {
             exe[n] = 0;
             for (int depth = 0; depth < 6; depth++) {
                 char *slash = strrchr(exe, '/');
+#ifdef _WIN32
+                char *bs = strrchr(exe, '\\');
+                if (!slash || (bs && bs > slash)) slash = bs;
+#endif
                 if (!slash) break;
                 *slash = 0;
                 snprintf(path_buf, sizeof path_buf, "%s/data/cacert.pem", exe);

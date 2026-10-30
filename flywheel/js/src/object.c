@@ -46,6 +46,8 @@ Object *object_new(Interp *I) {
     o->elem_capacity = 0;
     o->shape         = 0;
     o->prototype = NULL;
+    o->getters   = NULL;
+    o->setters   = NULL;
     o->native    = NULL;
     o->is_array  = 0;
     o->fn_node   = NULL;
@@ -68,6 +70,8 @@ static void object_free_depth(Object *o, int depth) {
     }
     free(o->keys);
     free(o->values);
+    if (o->getters) object_free_depth(o->getters, depth + 1);
+    if (o->setters) object_free_depth(o->setters, depth + 1);
     free(o);
     /* prototype intentionally NOT freed — it is often shared. */
 }
@@ -119,6 +123,16 @@ Value object_get(Interp *I, Object *o, const char *key) {
     if (I && I->has_error) return val_undefined();
     if (!o || !key) return obj_err(I, "object_get: null object or key");
 
+    if (o->getters) {
+        Value gv = object_get(I, o->getters, key);
+        Object *gf = (Object *)gv.as.object;
+        if (gv.kind == VAL_FUNCTION && gf && gf->native) {
+            Value self = { .kind = VAL_OBJECT };
+            self.as.object = o;
+            return gf->native(I, self, NULL, 0);
+        }
+    }
+
     /* Own property */
     int idx = object_find(o, key);
     if (idx >= 0) return o->values[idx];
@@ -148,6 +162,17 @@ Value object_get_index(Interp *I, Object *o, int idx) {
 void object_set(Interp *I, Object *o, const char *key, Value v) {
     if (I && I->has_error) return;
     if (!o || !key) { obj_err(I, "object_set: null object or key"); return; }
+
+    if (o->setters) {
+        Value sv = object_get(I, o->setters, key);
+        Object *sf = (Object *)sv.as.object;
+        if (sv.kind == VAL_FUNCTION && sf && sf->native) {
+            Value self = { .kind = VAL_OBJECT };
+            self.as.object = o;
+            sf->native(I, self, &v, 1);
+            return;
+        }
+    }
 
     int idx = object_find(o, key);
     if (idx >= 0) {
@@ -201,6 +226,18 @@ void object_delete(Interp *I, Object *o, const char *key) {
 /* ---------------------------------------------------------------- */
 /* Native method helper                                            */
 /* ---------------------------------------------------------------- */
+void object_set_getter(Interp *I, Object *o, const char *name, NativeFn fn) {
+    if (!o || !name || !fn) return;
+    if (!o->getters) o->getters = object_new(I);
+    if (o->getters) object_set_native(I, o->getters, name, fn);
+}
+
+void object_set_setter(Interp *I, Object *o, const char *name, NativeFn fn) {
+    if (!o || !name || !fn) return;
+    if (!o->setters) o->setters = object_new(I);
+    if (o->setters) object_set_native(I, o->setters, name, fn);
+}
+
 void object_set_native(Interp *I, Object *o, const char *name, NativeFn fn) {
     if (I && I->has_error) return;
     if (!o || !name || !fn) { obj_err(I, "object_set_native: null argument"); return; }

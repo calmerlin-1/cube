@@ -7,6 +7,9 @@
 #include <string.h>
 #include <dirent.h>
 #include <ctype.h>
+#if defined(_WIN32)
+#include <windows.h>
+#endif
 
 /* ---- Linux/Android: /sys filesystem ---- */
 

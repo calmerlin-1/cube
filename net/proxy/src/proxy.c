@@ -69,8 +69,10 @@ int proxy_parse(proxy_config_t *p, const char *url) {
     }
     snprintf(p->host, sizeof p->host, "%s", hp);
     if (p->type == PROXY_NONE) p->type = PROXY_HTTP;
-    p->port = (unsigned short)(portstr && *portstr ? atoi(portstr) :
-              (p->type == PROXY_HTTP ? 8080 : 1080));
+    long pv = portstr && *portstr ? strtol(portstr, NULL, 10) :
+              (p->type == PROXY_HTTP ? 8080 : 1080);
+    if (pv <= 0 || pv > 65535) return -1;
+    p->port = (unsigned short)pv;
     return p->host[0] ? 0 : -1;
 }
 

@@ -8,6 +8,9 @@
 #include <time.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#ifdef _WIN32
+#include <direct.h>
+#endif
 
 /** Base64 encode (RFC 4648) for PEM. */
 static size_t base64_encode(const uint8_t *in, size_t in_len,
@@ -68,7 +71,11 @@ static void cert_fingerprint(const uint8_t *der, size_t der_len, char *out, size
 
 /** Create directory, ignoring if exists. */
 static int ensure_dir(const char *path) {
+#ifdef _WIN32
+    if (_mkdir(path) == 0) return 0;
+#else
     if (mkdir(path, 0755) == 0) return 0;
+#endif
     struct stat st;
     if (stat(path, &st) == 0 && S_ISDIR(st.st_mode)) return 0;
     return -1;

@@ -19,6 +19,15 @@
     #include <sys/stat.h>
     #include <sys/time.h>
 #endif
+#ifdef _WIN32
+#define cube_mkdir(path, mode) _mkdir(path)
+#define CUBE_SO(p) ((const char *)(p))
+#include <direct.h>
+#else
+#define cube_mkdir(path, mode) mkdir(path, mode)
+#define CUBE_SO(p) (p)
+#endif
+
 /** cube.c — the cube orchestrator.
  *
  * Pipeline:
@@ -59,9 +68,12 @@
 #include "http_protocol.h"
 #include "http2.h"
 #include "proxy.h"
+#include "browser.h"
+#include "browser_native.h"
 #include "dom.h"
 #include "dom_style.h"
 #include "css.h"
+#include "js_colorize.h"
 #include "color.h"
 #include "trace.h"
 #include "html.h"
@@ -98,6 +110,10 @@ typedef struct {
     int         no_decode;    /* --no-decode: leave Content-Encoding bodies raw */
     const char *proxy;        /* --proxy URL (http/socks5/socks5h) */
     const char *no_proxy;     /* --no-proxy LIST */
+    const char *browser_url;  /* --browser URL: render with a headless browser */
+    const char *browser_engine; /* --browser-engine native|chromium|firefox */
+    const char *eval_expr;    /* --eval EXPR (native browser) */
+    const char *query_sel;    /* --query SELECTOR (native browser) */
     int         body_only;   /* -b: print only the body */
     int         show_headers;
     int         show_cert;
@@ -151,6 +167,11 @@ static void usage(const char *argv0) {
 "  --har FILE            write captured requests/responses as HAR 1.2\n"
 "  --intercept [FILE]    print capture events; FILE defaults to cube.har\n"
 "  --no-decode           do not decode gzip/deflate response bodies\n"
+"  --browser URL         render URL with cube's native engine and print the DOM\n"
+"  --browser-engine NAME native (default), or opt-in chromium/firefox\n"
+"  --eval EXPR           evaluate a JS expression in the page (native)\n"
+"  --query SELECTOR      print text content of the first CSS match (native)\n"
+"  --protocols           list registered HTTP protocols and support status\n"
 "  --http1               force ALPN=http/1.1 (no HTTP/2)\n"
 "  --show-cert           print peer cert chain info\n"
 "  --ja3                 print JA3 fingerprint\n"
@@ -666,9 +687,11 @@ static int write_body(const http_response_t *r, const char *path,
     int is_json = ct && strstr(ct, "json");
     int is_css  = ct && strstr(ct, "css");
     int is_xml  = ct && strstr(ct, "xml") && !is_html;
+    int is_js   = ct && (strstr(ct, "javascript") || strstr(ct, "ecmascript"));
+    int write_err = 0;
 
     if (to_file || o->raw) {
-        fwrite(r->body, 1, blen, fp);
+        if (fwrite(r->body, 1, blen, fp) != blen) write_err = 1;
     }
     else if (is_html) {
         if (o->debug_styles) debug_styles_dump((const char *)r->body, blen_all);
@@ -692,20 +715,29 @@ static int write_body(const http_response_t *r, const char *path,
             if (o->lines_spec) flen = apply_line_slice(fmt, flen, o->line_start, o->line_end);
             else               flen = cube_cap_lines(fmt, flen, o->head_lines);
             if (want_color) html_colorize(fmt, flen, fp);
-            else            fwrite(fmt, 1, flen, fp);
+            else {
+                if (fwrite(fmt, 1, flen, fp) != flen) write_err = 1;
+            }
             free(fmt);
             free(pretty);
         } else {
-            fwrite(r->body, 1, blen, fp);
+            if (fwrite(r->body, 1, blen, fp) != blen) write_err = 1;
         }
     }
     else if (want_color && is_json) json_colorize((const char *)r->body, blen, fp);
     else if (want_color && is_css)  css_colorize((const char *)r->body, blen, fp);
     else if (want_color && is_xml)  html_colorize((const char *)r->body, blen, fp);
-    else                            fwrite(r->body, 1, blen, fp);
+    else if (want_color && is_js)   js_colorize((const char *)r->body, blen, fp);
+    else {
+        if (fwrite(r->body, 1, blen, fp) != blen) write_err = 1;
+    }
 
-    if (path) fclose(fp);
-    return 0;
+    if (path) {
+        if (fclose(fp) != 0) write_err = 1;
+    } else if (ferror(fp)) {
+        write_err = 1;
+    }
+    return write_err ? -1 : 0;
 }
 
 static void apply_runtime_opts(const cube_opts_t *o) {
@@ -862,23 +894,28 @@ static int load_targets_file(cube_opts_t *o, const char *path) {
 /* ---- HAR 1.2 writer (streaming) ---- */
 static FILE *g_har = NULL;
 static int   g_har_first = 1;
+static int   g_har_failed = 0;
 
 static void har_str(FILE *f, const char *s, size_t n) {
-    fputc('"', f);
+    if (g_har_failed) return;
+    if (fputc('"', f) < 0) { g_har_failed = 1; return; }
     for (size_t i = 0; i < n; i++) {
         unsigned char c = (unsigned char)s[i];
+        int bad = 0;
         switch (c) {
-        case '"':  fputs("\\\"", f); break;
-        case '\\': fputs("\\\\", f); break;
-        case '\n': fputs("\\n", f); break;
-        case '\r': fputs("\\r", f); break;
-        case '\t': fputs("\\t", f); break;
+        case '"':  bad = fputs("\\\"", f) < 0; break;
+        case '\\': bad = fputs("\\\\", f) < 0; break;
+        case '\n': bad = fputs("\\n", f) < 0; break;
+        case '\r': bad = fputs("\\r", f) < 0; break;
+        case '\t': bad = fputs("\\t", f) < 0; break;
         default:
-            if (c < 0x20) fprintf(f, "\\u%04x", c);
-            else fputc(c, f);
+            if (c < 0x20) bad = fprintf(f, "\\u%04x", c) < 0;
+            else        bad = fputc(c, f) < 0;
+            break;
         }
+        if (bad) { g_har_failed = 1; return; }
     }
-    fputc('"', f);
+    if (fputc('"', f) < 0) g_har_failed = 1;
 }
 
 static void har_begin(const char *path) {
@@ -889,15 +926,19 @@ static void har_begin(const char *path) {
         return;
     }
     g_har_first = 1;
+    g_har_failed = 0;
     fputs("{\"log\":{\"version\":\"1.2\",\"creator\":{\"name\":\"cube\",\"version\":\"1.0\"},"
           "\"entries\":[\n", g_har);
+    if (ferror(g_har)) g_har_failed = 1;
 }
 
-static void har_end(void) {
-    if (!g_har) return;
+static int har_end(void) {
+    if (!g_har) return g_har_failed ? -1 : 0;
     fputs("\n]}}\n", g_har);
-    fclose(g_har);
+    if (ferror(g_har)) g_har_failed = 1;
+    if (fclose(g_har) != 0) g_har_failed = 1;
     g_har = NULL;
+    return g_har_failed ? -1 : 0;
 }
 
 static int header_is(const char *name, const char *want) { return cube_ci_eq(name, want); }
@@ -1031,6 +1072,7 @@ static void har_record(const char *url, const char *method,
     fprintf(g_har, "%zu},", r->body_len);
     fprintf(g_har, "\"cache\":{},\"timings\":{\"send\":0,\"wait\":%ld,\"receive\":0}}",
             elapsed_ms);
+    if (ferror(g_har)) g_har_failed = 1;
 }
 
 static int parse_args(int argc, char **argv, cube_opts_t *o,
@@ -1077,6 +1119,22 @@ static int parse_args(int argc, char **argv, cube_opts_t *o,
         if (!strcmp(a, "--har")) {
             if (i + 1 >= argc) { fprintf(stderr, "%scube: --har requires a value%s\n", col_red(), col_reset()); return -1; }
             o->har_path = argv[++i]; continue;
+        }
+        if (!strcmp(a, "--browser")) {
+            if (i + 1 >= argc) { fprintf(stderr, "%scube: --browser requires a URL%s\n", col_red(), col_reset()); return -1; }
+            o->browser_url = argv[++i]; continue;
+        }
+        if (!strcmp(a, "--browser-engine")) {
+            if (i + 1 >= argc) { fprintf(stderr, "%scube: --browser-engine requires a value%s\n", col_red(), col_reset()); return -1; }
+            o->browser_engine = argv[++i]; continue;
+        }
+        if (!strcmp(a, "--eval")) {
+            if (i + 1 >= argc) { fprintf(stderr, "%scube: --eval requires an expression%s\n", col_red(), col_reset()); return -1; }
+            o->eval_expr = argv[++i]; continue;
+        }
+        if (!strcmp(a, "--query")) {
+            if (i + 1 >= argc) { fprintf(stderr, "%scube: --query requires a selector%s\n", col_red(), col_reset()); return -1; }
+            o->query_sel = argv[++i]; continue;
         }
         if (!strcmp(a, "--intercept")) {
             o->intercept = 1;
@@ -1188,7 +1246,7 @@ static int parse_args(int argc, char **argv, cube_opts_t *o,
         return -1;
     }
     if (o->input_file && load_targets_file(o, o->input_file) != 0) return -1;
-    if (!o->url && !o->check_json && !o->interactive) { usage(argv[0]); return -1; }
+    if (!o->url && !o->check_json && !o->interactive && !o->browser_url) { usage(argv[0]); return -1; }
     return 0;
 }
 
@@ -1221,7 +1279,7 @@ static void cache_path(const char *url, char *out, size_t cap) {
 static int cache_save(const char *url, const http_response_t *resp, int max_age) {
     char dir[512];
     cache_dir(dir, sizeof dir);
-    mkdir(dir, 0700);
+    cube_mkdir(dir, 0700);
     char path[1024];
     cache_path(url, path, sizeof path);
 
@@ -1599,14 +1657,14 @@ static int fetch_response(const cube_opts_t *o, const char *url,
             struct timeval tv;
             tv.tv_sec  = o->timeout_ms / 1000;
             tv.tv_usec = (o->timeout_ms % 1000) * 1000;
-            setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv);
-            setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof tv);
+            setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, CUBE_SO(&tv), sizeof tv);
+            setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, CUBE_SO(&tv), sizeof tv);
         }
         {
             uint32_t _to = o->timeout_ms ? o->timeout_ms : 15000;
-            struct timeval _tv = { (time_t)(_to / 1000), (suseconds_t)((_to % 1000) * 1000) };
-            setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &_tv, sizeof _tv);
-            setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &_tv, sizeof _tv);
+            struct timeval _tv = { (time_t)(_to / 1000), (long)((_to % 1000) * 1000) };
+            setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, CUBE_SO(&_tv), sizeof _tv);
+            setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, CUBE_SO(&_tv), sizeof _tv);
         }
 
         /* ---- 4. TLS handshake ---- */
@@ -2273,6 +2331,63 @@ int main(int argc, char **argv) {
     if (o.check_json) return run_json_check(&o);
     { char _sp[1024]; url_schemes_load(cube_repo_path("flywheel/url/data/scheme_ports.conf", _sp, sizeof _sp)); }
     { char _pp[1024]; crisptls_profile_load_file(cube_repo_path("net/crisptls/data/profiles.conf", _pp, sizeof _pp)); }
+    if (o.browser_url) {
+        char *html = NULL; size_t hlen = 0; char berr[256] = {0};
+        const char *eng = o.browser_engine ? o.browser_engine : "native";
+        if (!strcmp(eng, "native")) {
+            http_response_t br;
+            memset(&br, 0, sizeof br);
+            crisptls_conn_t *btls = NULL;
+            int bfd = -1;
+            int frc = fetch_response(&o, o.browser_url, extra_headers, n_extra,
+                                     &br, &btls, &bfd);
+            if (btls) crisptls_close(btls);
+            if (bfd >= 0) close(bfd);
+            if (frc != 0) {
+                if (!o.quiet)
+                    fprintf(stderr, "%s[!] native browser: fetch failed%s\n",
+                            col_red(), col_reset());
+                return 5;
+            }
+            browser_native_opts_t nopts = { o.query_sel, o.eval_expr };
+            int nrc = browser_native_run(br.body ? (const char *)br.body : "",
+                                         br.body_len, &nopts,
+                                         &html, &hlen, berr, sizeof berr);
+            http_response_free(&br);
+            if (nrc != 0) {
+                if (!o.quiet)
+                    fprintf(stderr, "%s[!] %s%s\n", col_red(),
+                            berr[0] ? berr : "native browser failed", col_reset());
+                return 5;
+            }
+        } else if (!strcmp(eng, "chromium") || !strcmp(eng, "firefox")) {
+            if (browser_fetch(o.browser_url, eng, &html, &hlen, berr, sizeof berr) != 0) {
+                if (!o.quiet)
+                    fprintf(stderr, "%s[!] %s%s\n", col_red(),
+                            berr[0] ? berr : "browser fetch failed", col_reset());
+                return 5;
+            }
+        } else {
+            if (!o.quiet)
+                fprintf(stderr, "%scube: unknown browser engine '%s' "
+                        "(native|chromium|firefox)%s\n", col_red(), eng, col_reset());
+            return 2;
+        }
+        if (berr[0] && !o.quiet)
+            fprintf(stderr, "%s[!] %s%s\n", col_red(), berr, col_reset());
+        if (hlen && fwrite(html, 1, hlen, stdout) != hlen) {
+            free(html);
+            if (!o.quiet) fprintf(stderr, "%s[!] write failed%s\n", col_red(), col_reset());
+            return 6;
+        }
+        if (hlen && html[hlen - 1] != '\n') fputc('\n', stdout);
+        free(html);
+        if (fflush(stdout) != 0) {
+            if (!o.quiet) fprintf(stderr, "%s[!] stdout flush failed%s\n", col_red(), col_reset());
+            return 6;
+        }
+        return 0;
+    }
     if (o.interactive) return run_interactive(&o, extra_headers, n_extra);
 
     if (o.n_urls == 0) {
@@ -2310,6 +2425,10 @@ int main(int argc, char **argv) {
         fflush(stderr);
         if (rc != 0 && final_rc == 0) final_rc = rc;
     }
-    har_end();
+    if (har_end() != 0) {
+        if (!o.quiet)
+            fprintf(stderr, "%s[!] HAR write failed%s\n", col_red(), col_reset());
+        if (final_rc == 0) final_rc = 6;
+    }
     return final_rc;
 }

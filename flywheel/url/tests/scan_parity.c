@@ -30,7 +30,16 @@
 #define scan_find      scan_find_arch
 #define scan_find_any4 scan_find_any4_arch
 #define scan_all_scheme scan_all_scheme_arch
+#if defined(__aarch64__) || defined(__ARM_NEON)
 #include "scan_neon.h"
+#else
+/* Non-NEON hosts still run the parity harness: the "arch" side is the
+ * portable reference, which is the correct baseline there. */
+#define scan_bad_char_arch  scan_bad_char_scalar
+#define scan_find_arch      scan_find_scalar
+#define scan_find_any4_arch scan_find_any4_scalar
+#define scan_all_scheme_arch scan_all_scheme_scalar
+#endif
 #undef scan_bad_char
 #undef scan_find
 #undef scan_find_any4

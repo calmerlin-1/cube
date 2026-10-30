@@ -15,8 +15,24 @@ extern const char *alert_name(uint8_t d);
 #include <stdio.h>
 #include <errno.h>
 #include <unistd.h>
+
+/* poll() is POSIX-only; WSAPoll has the same ABI on Windows. */
+#ifdef _WIN32
+#include <winsock2.h>
+#ifndef POLLIN
+#define POLLIN POLLRDNORM
+#endif
+#ifndef MSG_NOSIGNAL
+#define MSG_NOSIGNAL 0
+#endif
+typedef WSAPOLLFD ct_pollfd_t;
+static int ct_poll(ct_pollfd_t *p, int n, int t) { return WSAPoll(p, n, t); }
+#else
 #include <poll.h>
 #include <sys/socket.h>
+typedef struct pollfd ct_pollfd_t;
+static int ct_poll(ct_pollfd_t *p, int n, int t) { return poll(p, n, t); }
+#endif
 
 /* ---- debug trace ---- */
 extern int g_crisptls_trace;
@@ -172,11 +188,11 @@ static void session_log_alert(const uint8_t *pt, size_t len, const char *when) {
 /* fd I/O with timeout */
 
 static int wait_fd(int fd, short ev, uint32_t timeout_ms) {
-    struct pollfd pfd;
+    ct_pollfd_t pfd;
     pfd.fd = fd;
     pfd.events = ev;
     pfd.revents = 0;
-    int r = poll(&pfd, 1, timeout_ms ? (int)timeout_ms : -1);
+    int r = ct_poll(&pfd, 1, timeout_ms ? (int)timeout_ms : -1);
     if (r < 0) { TRACE("wait_fd: poll: %s (errno=%d)", strerror(errno), errno); return -1; }
     if (r == 0) { TRACE("wait_fd: timeout after %ums", timeout_ms); return -2; }
     return 0;

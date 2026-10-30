@@ -35,6 +35,13 @@ struct Object {
 
     Object    *prototype;      /* may be NULL */
 
+    /* Optional accessor maps (name -> native function). Checked before
+     * plain property reads/writes, so host objects can expose live
+     * properties such as DOM textContent without special-casing the
+     * interpreter. */
+    Object    *getters;
+    Object    *setters;
+
     /* Native method payload (if this object IS a callable native). */
     NativeFn   native;
 
@@ -69,6 +76,10 @@ void    object_delete(Interp *I, Object *o, const char *key);
 
 /* Convenience: define a native method on an object. */
 void    object_set_native(Interp *I, Object *o, const char *name, NativeFn fn);
+
+/* Native accessors: reading/writing `name` calls fn(this=o, args...). */
+void    object_set_getter(Interp *I, Object *o, const char *name, NativeFn fn);
+void    object_set_setter(Interp *I, Object *o, const char *name, NativeFn fn);
 
 /* Arrays (Object with is_array = 1, keys are decimal strings) */
 Object *array_new(Interp *I);

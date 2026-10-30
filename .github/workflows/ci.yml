@@ -24,7 +24,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install deps
-        run: brew install libsodium
+        run: brew install libsodium pkg-config
+      - name: Configure Homebrew paths
+        run: |
+          echo "CPATH=$(brew --prefix libsodium)/include" >> "$GITHUB_ENV"
+          echo "LIBRARY_PATH=$(brew --prefix libsodium)/lib" >> "$GITHUB_ENV"
+          echo "PKG_CONFIG_PATH=$(brew --prefix libsodium)/lib/pkgconfig" >> "$GITHUB_ENV"
       - name: Build
         run: make clean && make
       - name: Test

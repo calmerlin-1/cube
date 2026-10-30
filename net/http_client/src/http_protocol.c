@@ -45,7 +45,8 @@ const http_protocol_t *http_protocol_by_name(const char *name) {
 int http_protocol_available(const char *name) {
     const http_protocol_t *p = http_protocol_by_name(name);
     if (!p) return 0;
-    /* QUIC/H3 framing is registered but not wired into the sender yet. */
+    /* QUIC/H3 framing is registered; sender is experimental
+     * (h3_send_io) and not yet interop with real H3 servers. */
     if (p->caps & HTTP_PCAP_QUIC) return 0;
     return 1;
 }
